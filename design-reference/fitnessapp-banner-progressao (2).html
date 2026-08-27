@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<title>FitnessApp — Banner Progressão</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Anton&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#0A0A0B;--surface:#151517;--line:#28282D;--text:#F3F2EF;--muted:#9A9AA2;
+    --accent:#FF5A1F;--accent-2:#FF7A3D;--accent-dark:#8A2A0A;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--bg);font-family:'Inter',sans-serif;color:var(--text);padding:48px 24px;}
+  .wrap{max-width:1100px;margin:0 auto;}
+  .frame-label{font-family:'Anton',sans-serif;font-size:11px;letter-spacing:.14em;color:var(--muted);text-transform:uppercase;margin:0 0 14px;}
+
+  .banner{
+    position:relative;
+    overflow:hidden;
+    background:var(--surface);
+    border:1px solid var(--line);
+    min-height:120px;
+    display:flex;
+    align-items:center;
+    margin-bottom:44px;
+  }
+  .banner-bg{
+    position:absolute;inset:0;
+    background-image:url('https://images.unsplash.com/photo-1672344048213-76b6e77304bd?fm=jpg&q=80&w=1600&auto=format&fit=crop');
+    background-size:cover;background-position:center 45%;
+    filter:grayscale(1) contrast(1.15) brightness(1.05);
+  }
+  .banner-scrim{
+    position:absolute;inset:0;
+    background:linear-gradient(90deg,
+      rgba(10,10,11,.95) 0%,
+      rgba(10,10,11,.85) 26%,
+      rgba(10,10,11,.40) 52%,
+      rgba(10,10,11,.05) 78%,
+      rgba(10,10,11,.25) 100%);
+  }
+  .banner-stripe{
+    position:absolute;right:0;top:0;bottom:0;width:22%;
+    background:repeating-linear-gradient(115deg, rgba(255,90,31,.22) 0 4px, transparent 4px 22px);
+    mix-blend-mode:screen;pointer-events:none;
+  }
+  .banner-inner{
+    position:relative;z-index:2;width:100%;
+    display:flex;align-items:center;justify-content:space-between;gap:20px;
+    padding:22px 26px;flex-wrap:wrap;
+  }
+  .banner-left{display:flex;align-items:center;gap:16px;min-width:0;}
+  .banner-icon{
+    width:48px;height:48px;flex:none;
+    background:linear-gradient(160deg,var(--accent-2),var(--accent-dark));
+    clip-path:polygon(9px 0,100% 0,100% calc(100% - 9px),calc(100% - 9px) 100%,0 100%,0 9px);
+    display:flex;align-items:center;justify-content:center;
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.5), 0 6px 16px -6px rgba(255,90,31,.5);
+  }
+  .banner-icon svg{width:22px;height:22px;stroke:#170B04;stroke-width:2.6;}
+  .banner-text h3{
+    font-family:'Anton',sans-serif;font-weight:400;text-transform:uppercase;letter-spacing:.02em;
+    font-size:18px;margin:0 0 4px;color:#FFFFFF;
+  }
+  .banner-text p{margin:0;font-size:13.5px;color:#D8D7DC;line-height:1.4;}
+
+  .btn-ghost-lg{
+    flex:none;
+    display:inline-flex;align-items:center;gap:9px;
+    height:44px;padding:0 20px;
+    font-family:'Anton',sans-serif;font-size:13px;letter-spacing:.05em;text-transform:uppercase;
+    color:#170B04;
+    background:linear-gradient(180deg,var(--accent-2),var(--accent));
+    clip-path:polygon(10px 0,100% 0,100% calc(100% - 10px),calc(100% - 10px) 100%,0 100%,0 10px);
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.5), 0 6px 16px -8px rgba(255,90,31,.55);
+    border:none;cursor:pointer;transition:filter .12s ease, transform .12s ease;
+  }
+  .btn-ghost-lg:hover{filter:brightness(1.08);}
+  .btn-ghost-lg:active{transform:translateY(2px) scale(.99);}
+  .btn-ghost-lg svg{width:14px;height:14px;stroke:#170B04;stroke-width:3;}
+
+  @media (max-width:640px){
+    .banner-scrim{background:linear-gradient(180deg, rgba(10,10,11,.55) 0%, rgba(10,10,11,.97) 65%);}
+    .banner-inner{flex-direction:column;align-items:flex-start;padding:20px;}
+    .btn-ghost-lg{width:100%;justify-content:center;}
+    .banner-stripe{width:100%;height:40%;bottom:auto;}
+  }
+
+  .note{background:var(--surface);border:1px solid var(--line);padding:16px 18px;font-size:13px;color:var(--muted);line-height:1.6;}
+  .note b{color:var(--text);}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <p class="frame-label">BANNER · SUA EVOLUÇÃO IMPORTA</p>
+
+  <div class="banner">
+    <div class="banner-bg"></div>
+    <div class="banner-scrim"></div>
+    <div class="banner-stripe"></div>
+    <div class="banner-inner">
+      <div class="banner-left">
+        <div class="banner-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M4 17l6-6 4 4 8-8M14 7h6v6"/></svg>
+        </div>
+        <div class="banner-text">
+          <h3>Sua evolução importa</h3>
+          <p>Finalize treinos para acompanhar seus saltos de carga.</p>
+        </div>
+      </div>
+      <button class="btn-ghost-lg">
+        Ver Progressão
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+      </button>
+    </div>
+  </div>
+
+  <div class="note">
+    <b>O que mudou:</b> troquei por uma foto de haltere em fundo escuro, preto e branco — mais limpa e menos "estranha" no enquadramento. O texto está branco puro pra ler fácil em qualquer fundo; o degradê escuro cobre só a faixa da esquerda (onde tem texto) e solta a foto praticamente sem escurecimento do meio pra direita. O botão "Ver Progressão" virou um CTA sólido no mesmo laranja "chapa" dos outros.
+  </div>
+</div>
+</body>
+</html>

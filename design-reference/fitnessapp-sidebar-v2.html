@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<title>FitnessApp — Sidebar v2</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Anton&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#0A0A0B;--surface:#151517;--surface-2:#1C1C20;--surface-3:#212126;
+    --line:#28282D;--text:#F3F2EF;--muted:#8E8E96;
+    --accent:#FF5A1F;--accent-2:#FF7A3D;--accent-dark:#8A2A0A;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;background:#050506;font-family:'Inter',sans-serif;color:var(--text);
+    display:flex;gap:40px;padding:40px;flex-wrap:wrap;}
+
+  .frame-label{font-family:'Anton',sans-serif;font-size:11px;letter-spacing:.14em;color:var(--muted);
+    text-transform:uppercase;margin-bottom:10px;}
+
+  .sidebar{
+    width:264px;height:820px;
+    background:linear-gradient(180deg,#141416,#0D0D0E);
+    border:1px solid var(--line);
+    padding:22px 16px;
+    display:flex;flex-direction:column;
+  }
+
+  .sb-brand{display:flex;align-items:center;gap:11px;padding:2px 6px 20px;border-bottom:1px solid var(--line);margin-bottom:22px;}
+  .sb-logo{
+    width:38px;height:38px;flex:none;background:linear-gradient(160deg,var(--accent-2),var(--accent-dark));
+    clip-path:polygon(8px 0,100% 0,100% calc(100% - 8px),calc(100% - 8px) 100%,0 100%,0 8px);
+    display:flex;align-items:center;justify-content:center;box-shadow:inset 0 1px 0 rgba(255,255,255,.4);
+  }
+  .sb-brand-text b{font-family:'Anton',sans-serif;font-size:15px;letter-spacing:.02em;display:block;}
+  .sb-brand-text span{font-size:11px;color:var(--muted);}
+
+  /* ===== NAV — versão nova, preenchendo mais a coluna ===== */
+  .nav{display:flex;flex-direction:column;gap:10px;}
+  .nav-item{
+    position:relative;
+    display:flex;align-items:center;gap:14px;
+    padding:16px 18px;
+    color:var(--muted);font-size:15px;font-weight:700;
+    cursor:pointer;transition:all .15s ease;
+    background:var(--surface);
+    border:1px solid var(--line);
+    clip-path:polygon(0 0, calc(100% - 16px) 0, 100% 100%, 0 100%);
+  }
+  .nav-item svg{width:21px;height:21px;flex:none;stroke:currentColor;}
+  .nav-item .nav-arrow{
+    margin-left:auto;width:14px;height:14px;opacity:0;transform:translateX(-4px);
+    transition:all .15s ease;stroke:currentColor;
+  }
+  .nav-item:hover{color:var(--text);border-color:#3A3A40;}
+  .nav-item:hover .nav-arrow{opacity:.6;transform:translateX(0);}
+
+  .nav-item.active{
+    color:#170B04;
+    background:linear-gradient(180deg,var(--accent-2) 0%, var(--accent) 60%, var(--accent-dark) 100%);
+    border-color:var(--accent-dark);
+    font-family:'Anton',sans-serif;font-weight:400;text-transform:uppercase;letter-spacing:.03em;font-size:15px;
+    box-shadow:inset 0 2px 0 rgba(255,255,255,.5), inset 0 -8px 12px rgba(0,0,0,.3), 0 8px 18px -10px rgba(255,90,31,.6);
+  }
+  .nav-item.active svg{stroke:#170B04;}
+  .nav-item.active .nav-arrow{opacity:1;transform:translateX(0);stroke:#170B04;}
+
+  .nav-group-label{
+    font-size:10px;letter-spacing:.14em;color:#5D5D64;text-transform:uppercase;font-weight:700;
+    margin:26px 4px 10px;display:flex;align-items:center;gap:8px;
+  }
+  .nav-group-label::after{content:"";flex:1;height:1px;background:var(--line);}
+
+  .sb-quote{margin-top:auto;padding:18px 14px;border-top:1px solid var(--line);}
+  .sb-quote p{font-family:'Anton',sans-serif;font-size:15px;text-transform:uppercase;line-height:1.25;margin:0 0 6px;}
+  .sb-quote p span{color:var(--accent-2);}
+  .sb-quote small{color:var(--muted);font-size:11px;}
+  .sb-version{font-size:10px;color:#4A4A50;margin-top:14px;}
+
+  /* alt: preview lado a lado com conteúdo pra ver proporção */
+  .with-content{display:flex;border:1px solid var(--line);}
+  .content-preview{
+    flex:1;background:radial-gradient(ellipse 700px 400px at 15% 0%, rgba(255,90,31,.06), transparent 60%), var(--bg);
+    display:flex;align-items:center;justify-content:center;color:#4A4A50;font-size:13px;text-align:center;
+  }
+  .content-preview .cp-inner{max-width:220px;padding:20px;}
+</style>
+</head>
+<body>
+
+<div>
+  <p class="frame-label">SIDEBAR — BOTÕES MAIORES</p>
+  <div class="with-content">
+    <aside class="sidebar" style="border:none;border-right:1px solid var(--line);">
+      <div class="sb-brand">
+        <div class="sb-logo"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#170B04" stroke-width="2.5"><path d="M6.5 6.5h11v11h-11z"/><path d="M3 10v4M21 10v4"/></svg></div>
+        <div class="sb-brand-text"><b>FITNESSAPP</b><span>Treinos &amp; Dieta</span></div>
+      </div>
+
+      <div class="nav">
+        <div class="nav-item active">
+          <svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M3 11l9-8 9 8"/><path d="M5 10v10h14V10"/></svg>
+          Início
+          <svg class="nav-arrow" viewBox="0 0 24 24" fill="none" stroke-width="3"><path d="M9 6l6 6-6 6"/></svg>
+        </div>
+        <div class="nav-item">
+          <svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M6 7v10M18 7v10M2 12h4M18 12h4M6 12h12"/></svg>
+          Treino
+          <svg class="nav-arrow" viewBox="0 0 24 24" fill="none" stroke-width="3"><path d="M9 6l6 6-6 6"/></svg>
+        </div>
+        <div class="nav-item">
+          <svg viewBox="0 0 24 24" fill="none" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>
+          Dieta
+          <svg class="nav-arrow" viewBox="0 0 24 24" fill="none" stroke-width="3"><path d="M9 6l6 6-6 6"/></svg>
+        </div>
+        <div class="nav-item">
+          <svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M4 20V10M12 20V4M20 20v-7"/></svg>
+          Progressão
+          <svg class="nav-arrow" viewBox="0 0 24 24" fill="none" stroke-width="3"><path d="M9 6l6 6-6 6"/></svg>
+        </div>
+      </div>
+
+      <div class="sb-quote">
+        <p>Disciplina, foco, <span>constância,<br>resultados.</span></p>
+        <small>Construa hoje a sua melhor versão.</small>
+        <div class="sb-version">v1.0.0</div>
+      </div>
+    </aside>
+
+    <div class="content-preview">
+      <div class="cp-inner">Sua tela do meio continua igual — só a largura/altura dos botões da nav mudou.</div>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>

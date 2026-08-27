@@ -1,0 +1,424 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<title>FitnessApp — Dieta</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Anton&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#0A0A0B;
+    --surface:#151517;
+    --surface-2:#1C1C20;
+    --surface-3:#212126;
+    --line:#28282D;
+    --text:#F3F2EF;
+    --muted:#8E8E96;
+    --accent:#FF5A1F;
+    --accent-2:#FF7A3D;
+    --accent-dark:#8A2A0A;
+    --ok:#3DBE6C;
+    --prot:#4EA1FF;
+    --carb:#3DBE6C;
+    --fat:#F2C14E;
+    --fib:#B98CFF;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;height:100%;}
+  body{
+    background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;
+    display:flex;min-height:100vh;
+  }
+
+  /* ============ SIDEBAR (desktop) / BOTTOM NAV (mobile) ============ */
+  .sidebar{
+    width:220px;flex:none;
+    background:linear-gradient(180deg,#141416,#0D0D0E);
+    border-right:1px solid var(--line);
+    padding:20px 12px;
+    display:none;flex-direction:column;
+    position:sticky;top:0;height:100vh;
+  }
+  @media (min-width:900px){ .sidebar{display:flex;} }
+
+  .sb-brand{display:flex;align-items:center;gap:10px;padding:6px 8px 20px;border-bottom:1px solid var(--line);margin-bottom:16px;}
+  .sb-logo{
+    width:34px;height:34px;flex:none;
+    background:linear-gradient(160deg,var(--accent-2),var(--accent-dark));
+    clip-path:polygon(7px 0,100% 0,100% calc(100% - 7px),calc(100% - 7px) 100%,0 100%,0 7px);
+    display:flex;align-items:center;justify-content:center;
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.4);
+  }
+  .sb-brand-text b{font-family:'Anton',sans-serif;font-size:13px;letter-spacing:.03em;display:block;}
+  .sb-brand-text span{font-size:10.5px;color:var(--muted);}
+
+  .nav-item{
+    display:flex;align-items:center;gap:11px;padding:11px 13px;margin-bottom:4px;
+    color:var(--muted);font-size:13.5px;font-weight:600;
+    border-left:3px solid transparent;cursor:pointer;transition:all .15s ease;
+  }
+  .nav-item svg{width:17px;height:17px;flex:none;stroke:currentColor;}
+  .nav-item:hover{color:var(--text);background:var(--surface-2);}
+  .nav-item.active{
+    color:#170B04;
+    background:linear-gradient(90deg,var(--accent-2),var(--accent));
+    border-left:3px solid var(--accent-dark);
+    font-family:'Anton',sans-serif;font-weight:400;letter-spacing:.03em;
+    text-transform:uppercase;font-size:12.5px;
+    clip-path:polygon(0 0, calc(100% - 9px) 0, 100% 100%, 0 100%);
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.5);
+  }
+  .nav-item.active svg{stroke:#170B04;}
+
+  .sb-quote{margin-top:auto;padding:14px 10px;border-top:1px solid var(--line);}
+  .sb-quote p{font-family:'Anton',sans-serif;font-size:13px;text-transform:uppercase;line-height:1.25;margin:0 0 4px;}
+  .sb-quote p span{color:var(--accent-2);}
+  .sb-quote small{color:var(--muted);font-size:10.5px;}
+  .sb-version{font-size:9.5px;color:#4A4A50;margin-top:12px;}
+
+  .bottom-nav{
+    position:fixed;left:0;right:0;bottom:0;z-index:20;
+    background:#101012;border-top:1px solid var(--line);
+    display:flex;justify-content:space-around;padding:8px 4px calc(8px + env(safe-area-inset-bottom));
+  }
+  @media (min-width:900px){ .bottom-nav{display:none;} }
+  .bn-item{
+    display:flex;flex-direction:column;align-items:center;gap:3px;
+    color:var(--muted);font-size:10px;font-weight:700;padding:4px 10px;
+    text-transform:uppercase;letter-spacing:.03em;
+  }
+  .bn-item svg{width:20px;height:20px;stroke:currentColor;}
+  .bn-item.active{color:var(--accent-2);}
+
+  /* ============ MAIN ============ */
+  .main{flex:1;min-width:0;padding-bottom:88px;}
+  @media (min-width:900px){ .main{padding-bottom:0;} }
+
+  .topbar{
+    display:flex;justify-content:flex-end;gap:10px;align-items:center;
+    padding:16px 20px;border-bottom:1px solid var(--line);
+  }
+  .pill-top{
+    display:flex;align-items:center;gap:6px;height:34px;padding:0 12px;
+    background:var(--surface);border:1px solid var(--line);
+    clip-path:polygon(8px 0,100% 0,100% calc(100% - 8px),calc(100% - 8px) 100%,0 100%,0 8px);
+    font-size:12.5px;font-weight:700;color:var(--text);
+  }
+  .pill-top.flame{color:var(--accent-2);}
+  .pill-top svg{width:14px;height:14px;}
+  .avatar{
+    width:34px;height:34px;background:var(--surface-2);border:1px solid var(--line);
+    display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;
+    clip-path:polygon(7px 0,100% 0,100% calc(100% - 7px),calc(100% - 7px) 100%,0 100%,0 7px);
+  }
+
+  .page{max-width:1120px;margin:0 auto;padding:28px 20px 60px;}
+  .page-head{display:flex;gap:14px;align-items:flex-start;margin-bottom:26px;}
+  .page-icon{
+    width:46px;height:46px;flex:none;
+    background:linear-gradient(160deg,var(--accent-2),var(--accent-dark));
+    clip-path:polygon(9px 0,100% 0,100% calc(100% - 9px),calc(100% - 9px) 100%,0 100%,0 9px);
+    display:flex;align-items:center;justify-content:center;
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.4);
+  }
+  .page-icon svg{width:22px;height:22px;stroke:#170B04;}
+  .page-head h1{font-family:'Anton',sans-serif;font-weight:400;text-transform:uppercase;font-size:26px;margin:2px 0 4px;}
+  .page-head p{color:var(--muted);font-size:13.5px;margin:0;}
+
+  .plate{background:var(--surface);border:1px solid var(--line);border-left:3px solid var(--accent);padding:18px 20px;}
+  .section-title{
+    display:flex;align-items:center;gap:8px;
+    font-family:'Anton',sans-serif;font-size:12px;letter-spacing:.12em;color:var(--muted);
+    margin:0 0 14px;
+  }
+  .section-title svg{width:14px;height:14px;stroke:var(--accent-2);}
+
+  .row2{display:grid;grid-template-columns:1fr;gap:16px;margin-bottom:16px;}
+  @media (min-width:860px){ .row2{grid-template-columns:1.55fr 1fr;} }
+  .row2b{display:grid;grid-template-columns:1fr;gap:16px;margin-bottom:16px;}
+  @media (min-width:860px){ .row2b{grid-template-columns:1.55fr 1fr;} }
+
+  /* prescrição cards */
+  .presc-grid{display:grid;grid-template-columns:1fr;gap:12px;margin-bottom:16px;}
+  @media (min-width:620px){ .presc-grid{grid-template-columns:1fr 1fr;} }
+  .presc-card{background:var(--surface);border:1px solid var(--line);padding:16px 18px;}
+  .presc-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;}
+  .presc-top b{font-size:14px;}
+  .presc-time{
+    display:flex;align-items:center;gap:5px;font-size:11.5px;color:var(--muted);
+    border:1px solid var(--line);padding:3px 9px;background:var(--surface-3);
+  }
+  .presc-time svg{width:11px;height:11px;}
+  .presc-card p{margin:0;font-size:13px;color:var(--muted);line-height:1.5;}
+
+  /* consumo do dia */
+  .nutri-row{margin-bottom:16px;}
+  .nutri-row:last-child{margin-bottom:0;}
+  .nutri-top{display:flex;justify-content:space-between;align-items:baseline;font-size:13.5px;margin-bottom:6px;}
+  .nutri-top .label{font-weight:700;}
+  .nutri-top .val{font-weight:800;}
+  .nutri-top .rest{color:#6C6C74;font-size:11.5px;font-weight:600;margin-left:4px;}
+  .nutri-track{height:6px;background:var(--surface-3);border:1px solid var(--line);overflow:hidden;}
+  .nutri-fill{height:100%;width:0%;}
+  .fill-cal{background:linear-gradient(90deg,var(--accent),var(--accent-2));}
+  .fill-prot{background:var(--prot);}
+  .fill-carb{background:var(--carb);}
+  .fill-fat{background:var(--fat);}
+  .fill-fib{background:var(--fib);}
+  .val-cal{color:var(--accent-2);} .val-prot{color:var(--prot);} .val-carb{color:var(--carb);} .val-fat{color:var(--fat);} .val-fib{color:var(--fib);}
+
+  /* quote box */
+  .quote-box{
+    background:var(--surface-2);border:1px solid var(--line);
+    display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;
+    padding:30px 20px;height:100%;min-height:220px;position:relative;overflow:hidden;
+  }
+  .quote-box::before{
+    content:"";position:absolute;inset:0;
+    background:repeating-linear-gradient(115deg, rgba(255,90,31,.05) 0 3px, transparent 3px 26px);
+    pointer-events:none;
+  }
+  .quote-box h2{
+    position:relative;font-family:'Anton',sans-serif;font-weight:400;text-transform:uppercase;
+    font-size:22px;line-height:1.15;margin:0 0 14px;
+  }
+  .quote-box h2 em{font-style:normal;color:var(--accent-2);}
+  .quote-div{width:34px;height:2px;background:var(--accent);margin:0 0 14px;position:relative;}
+  .quote-box p{position:relative;color:var(--muted);font-size:12.5px;margin:0;line-height:1.5;}
+
+  /* alimentos fixos */
+  .plate-head-flex{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;}
+  .plate-head-flex .section-title{margin:0;}
+  .btn{
+    font-family:'Anton',sans-serif;font-weight:400;text-transform:uppercase;
+    letter-spacing:.05em;font-size:12.5px;border:none;cursor:pointer;
+    display:inline-flex;align-items:center;justify-content:center;gap:8px;
+    transition:transform .12s ease, filter .12s ease;white-space:nowrap;
+  }
+  .btn:active{transform:translateY(2px) scale(.995);}
+  .btn-steel-sm{
+    height:38px;padding:0 16px;color:var(--text);
+    background:linear-gradient(180deg,#2A2A30,#19191C);border:1px solid #37373E;
+    clip-path:polygon(8px 0,100% 0,100% calc(100% - 8px),calc(100% - 8px) 100%,0 100%,0 8px);
+  }
+  .btn-steel-sm:hover{border-color:var(--accent);color:var(--accent-2);}
+  .btn-steel-sm svg{width:13px;height:13px;}
+
+  .food-item{
+    display:flex;justify-content:space-between;align-items:center;gap:12px;
+    background:var(--surface-3);border:1px solid var(--line);padding:14px 16px;
+  }
+  .food-item b{font-size:13.5px;font-weight:700;}
+  .food-macros{display:flex;gap:12px;font-size:12px;color:var(--muted);margin-top:3px;}
+  .food-macros span b{color:var(--text);font-weight:700;}
+  .icon-btn{
+    width:32px;height:32px;background:none;border:1px solid var(--line);cursor:pointer;
+    display:flex;align-items:center;justify-content:center;color:#6C6C74;flex:none;
+    transition:all .15s ease;
+  }
+  .icon-btn:hover{border-color:#B23A2E;color:#E5584A;}
+  .icon-btn svg{width:15px;height:15px;stroke:currentColor;}
+
+  /* registrar refeição */
+  .ai-tag{
+    display:inline-flex;align-items:center;gap:5px;font-size:11.5px;color:var(--accent-2);font-weight:700;margin-left:8px;
+  }
+  .ai-tag svg{width:12px;height:12px;}
+  .field-label{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);font-weight:700;margin:16px 0 9px;}
+
+  .meal-tabs{display:flex;flex-wrap:wrap;gap:8px;}
+  .meal-tab{
+    height:36px;padding:0 15px;font-size:12.5px;font-weight:700;color:var(--muted);
+    background:var(--surface-3);border:1px solid var(--line);cursor:pointer;
+    display:flex;align-items:center;transition:all .15s ease;
+  }
+  .meal-tab:hover{color:var(--text);}
+  .meal-tab.active{
+    color:var(--accent-2);border-color:var(--accent);background:rgba(255,90,31,.08);
+    box-shadow:inset 0 -2px 0 var(--accent);
+  }
+
+  textarea.field-textarea{
+    width:100%;min-height:96px;margin-top:9px;background:var(--surface-3);border:1px solid var(--line);
+    color:var(--text);font-family:'Inter',sans-serif;font-size:13.5px;padding:13px 14px;
+    resize:vertical;outline:none;transition:border-color .15s ease;
+  }
+  .field-textarea:focus{border-color:var(--accent);}
+  .field-textarea::placeholder{color:#5D5D64;}
+
+  .btn-primary{
+    height:48px;padding:0 22px;color:#150800;margin-top:16px;
+    background:linear-gradient(180deg,var(--accent-2) 0%, var(--accent) 55%, var(--accent-dark) 100%);
+    clip-path:polygon(12px 0,100% 0,100% calc(100% - 12px),calc(100% - 12px) 100%,0 100%,0 12px);
+    box-shadow:inset 0 2px 0 rgba(255,255,255,.55), inset 0 -8px 12px rgba(0,0,0,.35), 0 8px 18px -8px rgba(255,90,31,.55);
+    font-size:13.5px;width:100%;
+  }
+  @media (min-width:500px){ .btn-primary{width:auto;} }
+  .btn-primary:hover{filter:brightness(1.08);}
+  .btn-primary svg{width:15px;height:15px;}
+
+  .empty-state{color:#6C6C74;font-size:13px;text-align:center;padding:30px 10px;}
+</style>
+</head>
+<body>
+
+  <aside class="sidebar">
+    <div class="sb-brand">
+      <div class="sb-logo"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#170B04" stroke-width="2.5"><path d="M6.5 6.5h11v11h-11z"/><path d="M3 10v4M21 10v4"/></svg></div>
+      <div class="sb-brand-text"><b>FITNESSAPP</b><span>Treinos &amp; Dieta</span></div>
+    </div>
+    <div class="nav-item"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M3 11l9-8 9 8"/><path d="M5 10v10h14V10"/></svg>Início</div>
+    <div class="nav-item"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M6 7v10M18 7v10M2 12h4M18 12h4M6 12h12"/></svg>Treino</div>
+    <div class="nav-item active"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>Dieta</div>
+    <div class="nav-item"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M4 20V10M12 20V4M20 20v-7"/></svg>Progressão</div>
+    <div class="sb-quote">
+      <p>Disciplina, foco, <span>constância, resultados.</span></p>
+      <small>Construa hoje a sua melhor versão.</small>
+      <div class="sb-version">v1.0.0</div>
+    </div>
+  </aside>
+
+  <div class="main">
+    <div class="topbar">
+      <div class="pill-top flame"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2c1 3-2 4-2 7a4 4 0 108 0c0-1-1-2-1-2 2 1 3 3 3 5a8 8 0 11-16 0c0-4 3-6 4-8 0 0 0 2 1 3 0-2 1-4 3-5z"/></svg>1</div>
+      <div class="pill-top">2</div>
+      <div class="avatar">👤</div>
+    </div>
+
+    <div class="page">
+      <div class="page-head">
+        <div class="page-icon"><svg viewBox="0 0 24 24" fill="none" stroke-width="2.4"><path d="M12 21c-4-2.5-8-6-8-11a5 5 0 019-3 5 5 0 019 3c0 5-4 8.5-8 11a2 2 0 01-2 0z"/></svg></div>
+        <div>
+          <h1>Dieta</h1>
+          <p>Seu desempenho começa na alimentação.</p>
+        </div>
+      </div>
+
+      <p class="section-title">
+        <svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M12 2v20M2 12h20"/></svg>
+        PRESCRIÇÃO DO SEU NUTRICIONISTA
+      </p>
+      <div class="presc-grid">
+        <div class="presc-card">
+          <div class="presc-top">
+            <b>zxczxczxczx</b>
+            <span class="presc-time"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>21:11</span>
+          </div>
+          <p>qweqweqq<br>123wqwe</p>
+        </div>
+        <div class="presc-card">
+          <div class="presc-top">
+            <b>Cafe</b>
+            <span class="presc-time"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>03:00</span>
+          </div>
+          <p>150g arroz</p>
+        </div>
+      </div>
+
+      <div class="row2">
+        <div class="plate">
+          <p class="section-title">CONSUMO DO DIA</p>
+
+          <div class="nutri-row">
+            <div class="nutri-top"><span class="label">Calorias</span><span><span class="val val-cal">0</span> / 5.000 <span class="rest">(restam 5000)</span></span></div>
+            <div class="nutri-track"><div class="nutri-fill fill-cal" style="width:0%"></div></div>
+          </div>
+          <div class="nutri-row">
+            <div class="nutri-top"><span class="label">Proteína</span><span><span class="val val-prot">0</span> / 300 <span class="rest">(restam 300)</span></span></div>
+            <div class="nutri-track"><div class="nutri-fill fill-prot" style="width:0%"></div></div>
+          </div>
+          <div class="nutri-row">
+            <div class="nutri-top"><span class="label">Carboidrato</span><span><span class="val val-carb">0</span> / 200 <span class="rest">(restam 200)</span></span></div>
+            <div class="nutri-track"><div class="nutri-fill fill-carb" style="width:0%"></div></div>
+          </div>
+          <div class="nutri-row">
+            <div class="nutri-top"><span class="label">Gordura</span><span><span class="val val-fat">0</span> / 600 <span class="rest">(restam 600)</span></span></div>
+            <div class="nutri-track"><div class="nutri-fill fill-fat" style="width:0%"></div></div>
+          </div>
+          <div class="nutri-row">
+            <div class="nutri-top"><span class="label">Fibras</span><span><span class="val val-fib">0</span> / 40 <span class="rest">(restam 40)</span></span></div>
+            <div class="nutri-track"><div class="nutri-fill fill-fib" style="width:0%"></div></div>
+          </div>
+        </div>
+
+        <div class="quote-box">
+          <h2>Disciplina<br><em>constrói</em><br>resultados.</h2>
+          <div class="quote-div"></div>
+          <p>Boa alimentação.<br>Melhor performance.</p>
+        </div>
+      </div>
+
+      <div class="plate" style="margin-bottom:16px;">
+        <div class="plate-head-flex">
+          <p class="section-title">
+            <svg viewBox="0 0 24 24" fill="none" stroke-width="2"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M9 9h6v6H9z"/></svg>
+            ALIMENTOS FIXOS DIÁRIOS
+          </p>
+          <button class="btn btn-steel-sm">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 5v14M5 12h14"/></svg>
+            Adicionar
+          </button>
+        </div>
+        <div class="food-item">
+          <div>
+            <b>whey growth</b>
+            <div class="food-macros"><span><b>150</b> kcal</span><span><b>23g</b> prot</span><span><b>3.4g</b> carb</span></div>
+          </div>
+          <button class="icon-btn"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M4 7h16M9 7V5a1 1 0 011-1h4a1 1 0 011 1v2m2 0v13a1 1 0 01-1 1H8a1 1 0 01-1-1V7"/></svg></button>
+        </div>
+      </div>
+
+      <div class="row2b" style="margin-bottom:0;">
+        <div class="plate">
+          <p class="section-title" style="margin-bottom:4px;">
+            <svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M12 2a10 10 0 100 20 10 10 0 000-20zM8 12h8M12 8v8"/></svg>
+            REGISTRAR REFEIÇÃO
+            <span class="ai-tag"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3l1.9 4.8L19 9l-4.8 1.9L12 16l-1.9-4.8L5 9l4.8-1.9L12 3z"/></svg>Análise nutricional com IA</span>
+          </p>
+
+          <p class="field-label">Tipo de Refeição</p>
+          <div class="meal-tabs">
+            <div class="meal-tab active">Café da Manhã</div>
+            <div class="meal-tab">Almoço</div>
+            <div class="meal-tab">Lanche da Tarde</div>
+            <div class="meal-tab">Jantar</div>
+            <div class="meal-tab">Ceia</div>
+            <div class="meal-tab">Pré-Treino</div>
+            <div class="meal-tab">Pós-Treino</div>
+          </div>
+
+          <p class="field-label">Descreva o que você comeu</p>
+          <textarea class="field-textarea" placeholder="Ex: 150g de arroz, 100g de frango grelhado..."></textarea>
+
+          <button class="btn btn-primary">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3l1.9 4.8L19 9l-4.8 1.9L12 16l-1.9-4.8L5 9l4.8-1.9L12 3z"/></svg>
+            Analisar refeição
+          </button>
+        </div>
+
+        <div class="plate">
+          <p class="section-title">REFEIÇÕES DO DIA</p>
+          <div class="empty-state">Nenhuma refeição registrada ainda</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <nav class="bottom-nav">
+    <div class="bn-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 11l9-8 9 8"/><path d="M5 10v10h14V10"/></svg>Início</div>
+    <div class="bn-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 7v10M18 7v10M2 12h4M18 12h4M6 12h12"/></svg>Treino</div>
+    <div class="bn-item active"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>Dieta</div>
+    <div class="bn-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 20V10M12 20V4M20 20v-7"/></svg>Progressão</div>
+  </nav>
+
+  <script>
+    // demo visual: alterna a aba de tipo de refeição (sem lógica real de submit)
+    document.querySelectorAll('.meal-tab').forEach(tab=>{
+      tab.addEventListener('click', ()=>{
+        document.querySelectorAll('.meal-tab').forEach(t=>t.classList.remove('active'));
+        tab.classList.add('active');
+      });
+    });
+  </script>
+</body>
+</html>

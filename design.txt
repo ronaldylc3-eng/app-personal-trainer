@@ -1,0 +1,179 @@
+# ============================================================
+# DESIGN DO SISTEMA - App de Fitness (Treinos & Dieta)
+# ============================================================
+
+## 1. ARQUITETURA GERAL
+--------------------------------------------------------------
+O sistema é um app full-stack de fitness com:
+- Frontend: React + Vite + Tailwind CSS
+- Backend: Express.js + sql.js (WASM, pure JavaScript)
+- IA: Groq API (allam-2-7b)
+- Banco: SQLite via sql.js (sem node-gyp)
+
+Estrutura de pastas:
+  /src
+    /components
+      /Profile   → Perfil do usuário (Dados + Rotina Semanal)
+      /Workouts  → Treinos (fixos + adicionais, exercícios, séries)
+      /Diet      → Dieta (refeições, alimentos fixos, macros)
+    /services    → api.ts (cliente HTTP centralizado)
+    /hooks       → useFetch.ts, useUserId, getToday, getWeekStart
+    App.tsx      → Roteamento principal
+  /server
+    /db          → schema.sql, database.ts
+    /routes      → ai.ts, profile.ts, workouts.ts, diet.ts
+    index.ts     → Entry point Express
+
+## 2. BANCO DE DADOS (7 tabelas)
+--------------------------------------------------------------
+TABELAS:
+  - users: dados pessoais + metas calóricas/macros
+  - activities: atividades da rotina semanal manual
+  - workouts: treinos (fixos ou adicionais) por semana
+  - exercises: exercícios dentro de cada treino
+  - exercise_sets: séries de cada exercício (1:N com exercises)
+  - meals: refeições registradas (analisadas por IA)
+  - fixed_foods: alimentos fixos diários (whey, creatina, etc.)
+  - muscle_goals: metas de séries válidas por grupo muscular
+
+RELACIONAMENTO EXERCÍCIO → SÉRIES:
+  - Cada exercício NÃO tem campos de peso/reps diretamente
+  - Cada exercício possui N séries na tabela exercise_sets
+  - Cada série tem: set_number, weight_kg, repetitions, is_valid
+  - Fórmula de tonelagem: Σ(weight_kg × repetitions) por série válida
+
+DADOS PADRÃO PRÉ-SEMEADOS:
+  - Rotina semanal fixa: Dom=Lower, Seg=Upper+Boxe, Ter=CorridaTiros+Boxe,
+    Qua=Upper braços, Qui=Corrida regenerativa, Sex=Dia OFF, Sáb=Longão
+  - Grupos musculares: Peito, Ombro, Bíceps, Tríceps, Costa, Abdômen, etc.
+
+## 3. DESIGN DO FRONTEND
+--------------------------------------------------------------
+LAYOUT:
+  - Sidebar fixa à esquerda com 3 links: Perfil, Treino, Dieta
+  - Área principal à direita com scroll independente
+  - Fundo slate-900, cards slate-800, bordas slate-600/700
+  - Tema escuro com accent color "primary" (azul/violeta)
+
+PERFIL (2 ABAS):
+  Aba "Dados":
+    - Grid 2 colunas: Esquerda = formulário (nome, peso, altura, idade, macros)
+    - Direita = resumo visual das metas + distribuição calórica
+    - Fibra calculada automaticamente: (calorias/1000) × 15
+    - Botão "Salvar Perfil" bloqueado se protein_goal não preenchido
+
+  Aba "Rotina Semanal":
+    - Lista vertical dos 7 dias da semana (Dom a Sáb)
+    - Cada dia mostra atividades manuais + treinos fixos vinculados
+    - Botão "+" para adicionar atividade manual por dia
+    - Treinos fixos aparecem automaticamente (sem vínculo manual)
+    - Edição inline: renomear, alterar duração, excluir
+    - Badges: "Treino Fixo" (azul), contagem de atividades
+
+TREINOS:
+  - Seletor de semana (input date, agrupa por segunda-feira)
+  - Botão "Criar Treino" (nome, dia da semana, tipo fixo/adicional)
+  - Layout 2 colunas: Treino Fixo | Treino Adicional
+  - Cada treino é um card expansível:
+    - Header: badge dia (ex: "Seg") + nome + botões editar/excluir
+    - Corpo: lista de exercícios
+  - Cada exercício é expansível:
+    - Header: nome + badge grupo muscular + séries válidas + volume
+    - Corpo: tabela de séries (Série | Carga | Reps | Válida | Volume)
+    - Botão "Adicionar Série" + "Salvar Séries"
+  - Abaixo: Progresso por grupo muscular (barras 100% meta)
+    + Tonnage semanal detalhado
+
+DIETA:
+  - Seletor de data
+  - Alerta amarelo se sexta-feira (dia OFF - whey remanejado)
+  - Seção "Progresso Diário": 5 barras (calorias, proteína, carboidrato, gordura, fibras)
+    - Cores: vermelho, azul, amarelo, roxo, verde
+    - Mostra consumido / meta / restante
+  - Seção "Alimentos Fixos": lista com macros, botão adicionar/excluir
+    - Formulário inline: nome, calorias, proteína, carboidrato, gordura, fibras
+  - Seção "Registrar Refeição (IA)":
+    - Seleção de tipo de refeição (7 opções em pills)
+    - Textarea para descrição do alimento
+    - Botão "Analisar Refeição" com loading spinner
+    - Resultado: macros calculados pela IA
+  - Seção "Refeições do Dia": lista de todas as refeições com horário e macros
+
+## 4. DESIGN DO BACKEND
+--------------------------------------------------------------
+ROTA /api/profile:
+  GET    /profile/:userId          → perfil do usuário
+  PUT    /profile/:userId          → atualizar perfil
+  GET    /profile/:userId/activities → atividades da semana
+  POST   /profile/:userId/activities → criar atividade
+  PUT    /activities/:id           → atualizar atividade
+  DELETE /activities/:id           → excluir atividade
+  GET    /profile/:userId/muscle-goals → metas por grupo muscular
+  PUT    /profile/:userId/muscle-goals → atualizar meta
+
+ROTA /api/workouts:
+  GET    /workouts/:userId?weekDate=  → treinos da semana (com exercícios e séries)
+  POST   /workouts/:userId           → criar treino
+  PUT    /workouts/:id               → atualizar treino (renomear)
+  DELETE /workouts/:id               → excluir treino + exercícios + séries
+  POST   /workouts/:id/exercises     → criar exercício com séries
+  PUT    /exercises/:id              → atualizar exercício
+  DELETE /exercises/:id              →excluir exercício + séries
+  PUT    /exercises/:id/sets         → substituir todas as séries
+  GET    /progress/:userId?weekDate= → progresso semanal por grupo muscular
+  GET    /tonnage/:userId?weekDate=  → tonelagem detalhada por exercício
+
+ROTA /api/diet:
+  GET    /meals/:userId?date=        → refeições do dia
+  DELETE /meals/:id                  → excluir refeição
+  GET    /fixed-foods/:userId        → alimentos fixos
+  POST   /fixed-foods/:userId        → criar alimento fixo
+  DELETE /fixed-foods/:id            → excluir alimento fixo
+  GET    /daily-macros/:userId?date= → soma dos macros do dia
+
+ROTA /api/ai:
+  POST   /ai/analyze-food            → analisar refeição com Groq IA
+    - Envia descrição do alimento para o modelo allam-2-7b
+    - Retorna: calories, protein, carbs, fat, fiber
+    - Salva automaticamente na tabela meals
+    - Triple try/catch: Groq → OpenAI fallback → erro
+
+## 5. INTEGRAÇÃO COM IA (GROQ)
+--------------------------------------------------------------
+- Provider: Groq (NÃO OpenAI, NÃO Grok/xAI)
+- Modelo: allam-2-7b (único que retorna JSON estruturado)
+- URL: https://api.groq.com/openai/v1
+- API Key: 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
+- Prompt: sistema pede JSON com { calories, protein, carbs, fat, fiber }
+- Fallback: se Groq falhar, tenta OpenAI; se falhar, retorna erro ao usuário
+
+## 6. CONVENÇÕES DE CÓDIGO
+--------------------------------------------------------------
+- ESM ("type": "module") em todo o projeto
+- Backend usa import.meta.url + fileURLToPath para __dirname
+- Extensões .js em imports do backend
+- sql.js (WASM) para banco — sem better-sqlite3
+- Tailwind CSS para estilização
+- Lucide React para ícones
+- useFetch hook para dados reativos
+- useUserId() retorna 1 (usuário fixo, sem autenticação)
+
+## 7. COMO EXECUTAR
+--------------------------------------------------------------
+1. Instalar dependências: npm install
+2. Build frontend: npx vite build
+3. Iniciar servidor: npx tsx server/index.ts (porta 3001)
+4. Dev server: npx vite (proxy /api → localhost:3001)
+5. Build completo: npm run build (concurrently frontend + backend)
+
+## 8. ESTADO ATUAL
+--------------------------------------------------------------
+✓ TypeScript compila sem erros
+✓ Vite build produz bundle de 221KB
+✓ Servidor inicia na porta 3001
+✓ Groq IA funcionando com allam-2-7b
+✓ Todas as funcionalidades implementadas:
+  - Perfil com dados + rotina semanal
+  - Treinos com exercícios e séries dinâmicas
+  - Tonnage e progresso por grupo muscular
+  - Dieta com análise IA, alimentos fixos, macros diários

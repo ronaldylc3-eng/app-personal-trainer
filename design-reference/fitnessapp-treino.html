@@ -1,0 +1,424 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<title>FitnessApp — Treino</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Anton&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#0A0A0B;
+    --surface:#151517;
+    --surface-2:#1C1C20;
+    --surface-3:#212126;
+    --line:#28282D;
+    --text:#F3F2EF;
+    --muted:#8E8E96;
+    --accent:#FF5A1F;
+    --accent-2:#FF7A3D;
+    --accent-dark:#8A2A0A;
+    --ok:#3DBE6C;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;height:100%;}
+  body{
+    background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;
+    display:flex;min-height:100vh;
+  }
+
+  /* ============ SIDEBAR (desktop) / BOTTOM NAV (mobile) ============ */
+  .sidebar{
+    width:220px;flex:none;
+    background:linear-gradient(180deg,#141416,#0D0D0E);
+    border-right:1px solid var(--line);
+    padding:20px 12px;
+    display:none;flex-direction:column;
+    position:sticky;top:0;height:100vh;
+  }
+  @media (min-width:900px){ .sidebar{display:flex;} }
+
+  .sb-brand{display:flex;align-items:center;gap:10px;padding:6px 8px 20px;border-bottom:1px solid var(--line);margin-bottom:16px;}
+  .sb-logo{
+    width:34px;height:34px;flex:none;
+    background:linear-gradient(160deg,var(--accent-2),var(--accent-dark));
+    clip-path:polygon(7px 0,100% 0,100% calc(100% - 7px),calc(100% - 7px) 100%,0 100%,0 7px);
+    display:flex;align-items:center;justify-content:center;
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.4);
+  }
+  .sb-brand-text b{font-family:'Anton',sans-serif;font-size:13px;letter-spacing:.03em;display:block;}
+  .sb-brand-text span{font-size:10.5px;color:var(--muted);}
+
+  .nav-item{
+    display:flex;align-items:center;gap:11px;padding:11px 13px;margin-bottom:4px;
+    color:var(--muted);font-size:13.5px;font-weight:600;
+    border-left:3px solid transparent;cursor:pointer;transition:all .15s ease;
+  }
+  .nav-item svg{width:17px;height:17px;flex:none;stroke:currentColor;}
+  .nav-item:hover{color:var(--text);background:var(--surface-2);}
+  .nav-item.active{
+    color:#170B04;
+    background:linear-gradient(90deg,var(--accent-2),var(--accent));
+    border-left:3px solid var(--accent-dark);
+    font-family:'Anton',sans-serif;font-weight:400;letter-spacing:.03em;
+    text-transform:uppercase;font-size:12.5px;
+    clip-path:polygon(0 0, calc(100% - 9px) 0, 100% 100%, 0 100%);
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.5);
+  }
+  .nav-item.active svg{stroke:#170B04;}
+
+  .sb-quote{margin-top:auto;padding:14px 10px;border-top:1px solid var(--line);}
+  .sb-quote p{font-family:'Anton',sans-serif;font-size:13px;text-transform:uppercase;line-height:1.25;margin:0 0 4px;}
+  .sb-quote p span{color:var(--accent-2);}
+  .sb-quote small{color:var(--muted);font-size:10.5px;}
+  .sb-version{font-size:9.5px;color:#4A4A50;margin-top:12px;}
+
+  .bottom-nav{
+    position:fixed;left:0;right:0;bottom:0;z-index:20;
+    background:#101012;border-top:1px solid var(--line);
+    display:flex;justify-content:space-around;padding:8px 4px calc(8px + env(safe-area-inset-bottom));
+  }
+  @media (min-width:900px){ .bottom-nav{display:none;} }
+  .bn-item{
+    display:flex;flex-direction:column;align-items:center;gap:3px;
+    color:var(--muted);font-size:10px;font-weight:700;padding:4px 10px;
+    text-transform:uppercase;letter-spacing:.03em;
+  }
+  .bn-item svg{width:20px;height:20px;stroke:currentColor;}
+  .bn-item.active{color:var(--accent-2);}
+
+  /* ============ MAIN ============ */
+  .main{flex:1;min-width:0;padding-bottom:88px;}
+  @media (min-width:900px){ .main{padding-bottom:0;} }
+
+  .topbar{
+    display:flex;justify-content:flex-end;gap:10px;align-items:center;
+    padding:16px 20px;border-bottom:1px solid var(--line);
+  }
+  .pill{
+    display:flex;align-items:center;gap:6px;height:34px;padding:0 12px;
+    background:var(--surface);border:1px solid var(--line);
+    clip-path:polygon(8px 0,100% 0,100% calc(100% - 8px),calc(100% - 8px) 100%,0 100%,0 8px);
+    font-size:12.5px;font-weight:700;color:var(--text);
+  }
+  .pill.flame{color:var(--accent-2);}
+  .pill svg{width:14px;height:14px;}
+  .avatar{
+    width:34px;height:34px;background:var(--surface-2);border:1px solid var(--line);
+    display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;
+    clip-path:polygon(7px 0,100% 0,100% calc(100% - 7px),calc(100% - 7px) 100%,0 100%,0 7px);
+  }
+
+  .page{max-width:920px;margin:0 auto;padding:28px 20px 60px;}
+  .page-head{display:flex;gap:14px;align-items:flex-start;margin-bottom:26px;}
+  .page-icon{
+    width:46px;height:46px;flex:none;
+    background:linear-gradient(160deg,var(--accent-2),var(--accent-dark));
+    clip-path:polygon(9px 0,100% 0,100% calc(100% - 9px),calc(100% - 9px) 100%,0 100%,0 9px);
+    display:flex;align-items:center;justify-content:center;
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.4);
+  }
+  .page-icon svg{width:22px;height:22px;stroke:#170B04;}
+  .page-head h1{font-family:'Anton',sans-serif;font-weight:400;text-transform:uppercase;font-size:26px;margin:2px 0 4px;}
+  .page-head p{color:var(--muted);font-size:13.5px;margin:0;}
+
+  /* card base — chapa com barra lateral */
+  .plate{
+    background:var(--surface);border:1px solid var(--line);border-left:3px solid var(--accent);
+    padding:18px 20px;margin-bottom:18px;position:relative;
+  }
+  .plate-flat{border-left:1px solid var(--line);}
+
+  .ficha-row{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;}
+  .ficha-row h3{font-size:16.5px;margin:0 0 4px;}
+  .ficha-row .meta{color:var(--muted);font-size:12.5px;}
+  .badge-ativa{
+    display:inline-flex;align-items:center;gap:6px;
+    font-family:'Anton',sans-serif;font-size:11px;letter-spacing:.1em;
+    color:var(--ok);border:1px solid rgba(61,190,108,.4);background:rgba(61,190,108,.08);
+    padding:6px 12px;
+    clip-path:polygon(6px 0,100% 0,100% calc(100% - 6px),calc(100% - 6px) 100%,0 100%,0 6px);
+  }
+  .badge-ativa::before{content:"";width:6px;height:6px;border-radius:50%;background:var(--ok);}
+
+  /* exercise block */
+  .ex-head{display:flex;justify-content:space-between;align-items:center;gap:14px;flex-wrap:wrap;margin-bottom:0;}
+  .ex-head h3{font-size:16px;margin:0 0 4px;}
+  .ex-head .meta{color:var(--muted);font-size:12.5px;}
+
+  .btn{
+    font-family:'Anton',sans-serif;font-weight:400;text-transform:uppercase;
+    letter-spacing:.06em;font-size:14px;border:none;cursor:pointer;
+    display:inline-flex;align-items:center;justify-content:center;gap:9px;
+    transition:transform .12s ease, filter .12s ease;white-space:nowrap;
+  }
+  .btn:active{transform:translateY(2px) scale(.995);}
+  .btn-primary{
+    height:48px;padding:0 22px;color:#150800;
+    background:linear-gradient(180deg,var(--accent-2) 0%, var(--accent) 55%, var(--accent-dark) 100%);
+    clip-path:polygon(12px 0,100% 0,100% calc(100% - 12px),calc(100% - 12px) 100%,0 100%,0 12px);
+    box-shadow:inset 0 2px 0 rgba(255,255,255,.55), inset 0 -8px 12px rgba(0,0,0,.35), 0 8px 18px -8px rgba(255,90,31,.55);
+  }
+  .btn-primary:hover{filter:brightness(1.08);}
+  .btn-steel{
+    height:44px;padding:0 20px;color:var(--text);
+    background:linear-gradient(180deg,#2A2A30,#19191C);border:1px solid #37373E;
+    clip-path:polygon(10px 0,100% 0,100% calc(100% - 10px),calc(100% - 10px) 100%,0 100%,0 10px);
+    font-size:13px;
+  }
+  .btn-steel:hover{border-color:var(--accent);color:var(--accent-2);}
+
+  .tag-group{
+    display:inline-flex;align-items:center;gap:8px;margin-bottom:10px;
+    font-size:13.5px;font-weight:700;
+  }
+  .tag-num{
+    width:22px;height:22px;background:var(--surface-3);border:1px solid var(--line);
+    display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;
+    clip-path:polygon(5px 0,100% 0,100% calc(100% - 5px),calc(100% - 5px) 100%,0 100%,0 5px);
+  }
+  .tag-chip{
+    font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.05em;
+    color:var(--accent-2);background:rgba(255,90,31,.1);border:1px solid rgba(255,90,31,.3);
+    padding:3px 10px;clip-path:polygon(4px 0,100% 0,100% calc(100% - 4px),calc(100% - 4px) 100%,0 100%,0 4px);
+  }
+  .set-meta{color:var(--muted);font-size:12.5px;font-weight:600;}
+
+  /* ===== TABLE (desktop) / CARDS (mobile) ===== */
+  .set-table{width:100%;border-collapse:collapse;margin-top:14px;}
+  .set-table thead th{
+    text-align:left;font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;
+    color:#6C6C74;font-weight:700;padding:0 10px 10px;border-bottom:1px solid var(--line);
+  }
+  .set-table tbody td{padding:12px 10px;border-bottom:1px solid var(--line);font-size:13.5px;vertical-align:middle;}
+  .set-table tbody tr:last-child td{border-bottom:none;}
+  .set-num{
+    width:24px;height:24px;background:var(--surface-3);border:1px solid var(--line);
+    display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;color:var(--muted);
+  }
+  .mini-input{
+    width:64px;height:38px;background:var(--surface-3);border:1px solid var(--line);
+    color:var(--text);font-size:13.5px;text-align:center;font-family:'Inter',sans-serif;
+    outline:none;transition:border-color .15s ease;
+  }
+  .mini-input:focus{border-color:var(--accent);}
+  .mini-input::placeholder{color:#4A4A50;}
+
+  .chk{
+    display:inline-flex;align-items:center;gap:7px;cursor:pointer;font-size:12.5px;color:var(--muted);user-select:none;
+  }
+  .chk input{display:none;}
+  .chk-box{
+    width:18px;height:18px;border:1px solid var(--line);background:var(--surface-3);
+    display:flex;align-items:center;justify-content:center;flex:none;transition:all .12s ease;
+  }
+  .chk input:checked + .chk-box{background:var(--accent);border-color:var(--accent-dark);}
+  .chk-box svg{width:11px;height:11px;stroke:#150800;opacity:0;transition:opacity .1s ease;stroke-width:3.5;}
+  .chk input:checked + .chk-box svg{opacity:1;}
+  .chk input:checked ~ span.chk-label{color:var(--ok);}
+
+  .vol-dash{color:#4A4A50;}
+
+  /* mobile stacked rows */
+  @media (max-width:719px){
+    .set-table thead{display:none;}
+    .set-table, .set-table tbody, .set-table tr, .set-table td{display:block;width:100%;}
+    .set-table tbody tr{
+      background:var(--surface-3);border:1px solid var(--line);margin-bottom:10px;padding:12px;
+    }
+    .set-table tbody td{border:none;padding:6px 0;display:flex;justify-content:space-between;align-items:center;}
+    .set-table tbody td::before{
+      content:attr(data-label);font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;
+      color:#6C6C74;font-weight:700;
+    }
+    .mini-input{width:90px;}
+  }
+
+  /* stats row */
+  .stats-grid{display:grid;grid-template-columns:1fr;gap:14px;margin-top:6px;}
+  @media (min-width:720px){ .stats-grid{grid-template-columns:1fr 1fr;} }
+  .stat-card{background:var(--surface);border:1px solid var(--line);padding:20px;}
+  .stat-head{display:flex;align-items:center;gap:9px;margin-bottom:16px;}
+  .stat-ic{
+    width:26px;height:26px;background:var(--surface-3);border:1px solid var(--line);
+    display:flex;align-items:center;justify-content:center;flex:none;
+    clip-path:polygon(5px 0,100% 0,100% calc(100% - 5px),calc(100% - 5px) 100%,0 100%,0 5px);
+  }
+  .stat-ic svg{width:13px;height:13px;stroke:var(--accent-2);}
+  .stat-head span{font-family:'Anton',sans-serif;font-size:12px;letter-spacing:.1em;color:var(--muted);}
+
+  .prog-row{display:flex;justify-content:space-between;font-size:13.5px;font-weight:700;margin-bottom:8px;}
+  .prog-row b{color:var(--accent-2);font-weight:800;}
+  .prog-track{height:6px;background:var(--surface-3);border:1px solid var(--line);position:relative;overflow:hidden;margin-bottom:18px;}
+  .prog-fill{height:100%;width:0%;background:linear-gradient(90deg,var(--accent),var(--accent-2));}
+  .total-row{display:flex;justify-content:space-between;align-items:center;font-size:13.5px;color:var(--muted);}
+  .total-row b{font-family:'Anton',sans-serif;color:var(--accent-2);font-size:15px;letter-spacing:.02em;}
+
+  .empty-state{color:#6C6C74;font-size:13px;text-align:center;padding:20px 0;}
+</style>
+</head>
+<body>
+
+  <aside class="sidebar">
+    <div class="sb-brand">
+      <div class="sb-logo"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#170B04" stroke-width="2.5"><path d="M6.5 6.5h11v11h-11z"/><path d="M3 10v4M21 10v4"/></svg></div>
+      <div class="sb-brand-text"><b>FITNESSAPP</b><span>Treinos &amp; Dieta</span></div>
+    </div>
+    <div class="nav-item"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M3 11l9-8 9 8"/><path d="M5 10v10h14V10"/></svg>Início</div>
+    <div class="nav-item active"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M6 7v10M18 7v10M2 12h4M18 12h4M6 12h12"/></svg>Treino</div>
+    <div class="nav-item"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>Dieta</div>
+    <div class="nav-item"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M4 20V10M12 20V4M20 20v-7"/></svg>Progressão</div>
+    <div class="sb-quote">
+      <p>Disciplina, foco, <span>constância, resultados.</span></p>
+      <small>Construa hoje a sua melhor versão.</small>
+      <div class="sb-version">v1.0.0</div>
+    </div>
+  </aside>
+
+  <div class="main">
+    <div class="topbar">
+      <div class="pill flame"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2c1 3-2 4-2 7a4 4 0 108 0c0-1-1-2-1-2 2 1 3 3 3 5a8 8 0 11-16 0c0-4 3-6 4-8 0 0 0 2 1 3 0-2 1-4 3-5z"/></svg>1</div>
+      <div class="pill">2</div>
+      <div class="avatar">👤</div>
+    </div>
+
+    <div class="page">
+      <div class="page-head">
+        <div class="page-icon"><svg viewBox="0 0 24 24" fill="none" stroke-width="2.4"><path d="M6 7v10M18 7v10M2 12h4M18 12h4M6 12h12"/></svg></div>
+        <div>
+          <h1>Meus Treinos</h1>
+          <p>Preencha carga, repetições e finalize o treino do dia.</p>
+        </div>
+      </div>
+
+      <div class="plate plate-flat">
+        <div class="ficha-row">
+          <div>
+            <h3>Ficha 12 – 213123123123</h3>
+            <span class="meta">1 treino(s) · 1 exercício(s)</span>
+          </div>
+          <span class="badge-ativa">ATIVA</span>
+        </div>
+      </div>
+
+      <div class="plate">
+        <div class="ex-head">
+          <div>
+            <h3>asd</h3>
+            <span class="meta">1 exercício(s) — inicie o treino para preencher as séries</span>
+          </div>
+          <button class="btn btn-primary">
+            <svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+            Iniciar treino
+          </button>
+        </div>
+
+        <div style="margin-top:22px;">
+          <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:2px;">
+            <div class="tag-group"><span class="tag-num">1</span></div>
+            <span class="tag-chip">Peito</span>
+            <span class="set-meta">3×8–12 · 90s</span>
+          </div>
+        </div>
+
+        <table class="set-table">
+          <thead>
+            <tr>
+              <th style="width:40px;">#</th>
+              <th>Descanso</th>
+              <th>Reps</th>
+              <th>Carga (kg)</th>
+              <th>Válida</th>
+              <th style="text-align:right;">Vol.</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td data-label="#"><div class="set-num">1</div></td>
+              <td data-label="Descanso">90s</td>
+              <td data-label="Reps"><input class="mini-input" placeholder="0"></td>
+              <td data-label="Carga (kg)"><input class="mini-input" placeholder="0"></td>
+              <td data-label="Válida">
+                <label class="chk">
+                  <input type="checkbox">
+                  <span class="chk-box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M5 12l5 5 9-10"/></svg></span>
+                  <span class="chk-label">Válida</span>
+                </label>
+              </td>
+              <td data-label="Vol." style="text-align:right;"><span class="vol-dash">—</span></td>
+            </tr>
+            <tr>
+              <td data-label="#"><div class="set-num">2</div></td>
+              <td data-label="Descanso">90s</td>
+              <td data-label="Reps"><input class="mini-input" placeholder="0"></td>
+              <td data-label="Carga (kg)"><input class="mini-input" placeholder="0"></td>
+              <td data-label="Válida">
+                <label class="chk">
+                  <input type="checkbox">
+                  <span class="chk-box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M5 12l5 5 9-10"/></svg></span>
+                  <span class="chk-label">Válida</span>
+                </label>
+              </td>
+              <td data-label="Vol." style="text-align:right;"><span class="vol-dash">—</span></td>
+            </tr>
+            <tr>
+              <td data-label="#"><div class="set-num">3</div></td>
+              <td data-label="Descanso">90s</td>
+              <td data-label="Reps"><input class="mini-input" placeholder="0"></td>
+              <td data-label="Carga (kg)"><input class="mini-input" placeholder="0"></td>
+              <td data-label="Válida">
+                <label class="chk">
+                  <input type="checkbox">
+                  <span class="chk-box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M5 12l5 5 9-10"/></svg></span>
+                  <span class="chk-label">Válida</span>
+                </label>
+              </td>
+              <td data-label="Vol." style="text-align:right;"><span class="vol-dash">—</span></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="stats-grid">
+        <div class="stat-card">
+          <div class="stat-head">
+            <div class="stat-ic"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4"/></svg></div>
+            <span>SÉRIES VÁLIDAS</span>
+          </div>
+          <div class="prog-row"><span>Peito</span><b>0/3</b></div>
+          <div class="prog-track"><div class="prog-fill" style="width:0%"></div></div>
+          <div class="total-row">Total da Sessão <b>0/3 séries</b></div>
+        </div>
+
+        <div class="stat-card">
+          <div class="stat-head">
+            <div class="stat-ic"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M4 20V10M12 20V4M20 20v-7"/></svg></div>
+            <span>VOLUME DA SESSÃO</span>
+          </div>
+          <p style="font-size:12.5px;color:var(--muted);margin:0 0 14px;">Σ (Carga × Reps) das séries válidas</p>
+          <div class="empty-state">Marque séries como válidas para calcular o volume</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <nav class="bottom-nav">
+    <div class="bn-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 11l9-8 9 8"/><path d="M5 10v10h14V10"/></svg>Início</div>
+    <div class="bn-item active"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 7v10M18 7v10M2 12h4M18 12h4M6 12h12"/></svg>Treino</div>
+    <div class="bn-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>Dieta</div>
+    <div class="bn-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 20V10M12 20V4M20 20v-7"/></svg>Progressão</div>
+  </nav>
+
+  <script>
+    // só pra demo visual: liga checkbox à cor da linha e ao progresso (sem lógica real de app)
+    document.querySelectorAll('.chk input').forEach(cb=>{
+      cb.addEventListener('change', ()=>{
+        const total = document.querySelectorAll('.chk input').length;
+        const checked = document.querySelectorAll('.chk input:checked').length;
+        document.querySelector('.prog-fill').style.width = (checked/total*100)+'%';
+        document.querySelectorAll('.prog-row b')[0].textContent = checked+'/'+total;
+        document.querySelector('.total-row b').textContent = checked+'/'+total+' séries';
+      });
+    });
+  </script>
+</body>
+</html>

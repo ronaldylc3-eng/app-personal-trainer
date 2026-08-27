@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<title>FitnessApp — Progressão</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Anton&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#0A0A0B;
+    --surface:#151517;
+    --surface-2:#1C1C20;
+    --surface-3:#212126;
+    --line:#28282D;
+    --text:#F3F2EF;
+    --muted:#8E8E96;
+    --accent:#FF5A1F;
+    --accent-2:#FF7A3D;
+    --accent-dark:#8A2A0A;
+    --gold:#E8B23D;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;height:100%;}
+  body{background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;display:flex;min-height:100vh;}
+
+  /* ============ SIDEBAR / BOTTOM NAV ============ */
+  .sidebar{
+    width:220px;flex:none;background:linear-gradient(180deg,#141416,#0D0D0E);
+    border-right:1px solid var(--line);padding:20px 12px;
+    display:none;flex-direction:column;position:sticky;top:0;height:100vh;
+  }
+  @media (min-width:900px){ .sidebar{display:flex;} }
+  .sb-brand{display:flex;align-items:center;gap:10px;padding:6px 8px 20px;border-bottom:1px solid var(--line);margin-bottom:16px;}
+  .sb-logo{
+    width:34px;height:34px;flex:none;background:linear-gradient(160deg,var(--accent-2),var(--accent-dark));
+    clip-path:polygon(7px 0,100% 0,100% calc(100% - 7px),calc(100% - 7px) 100%,0 100%,0 7px);
+    display:flex;align-items:center;justify-content:center;box-shadow:inset 0 1px 0 rgba(255,255,255,.4);
+  }
+  .sb-brand-text b{font-family:'Anton',sans-serif;font-size:13px;letter-spacing:.03em;display:block;}
+  .sb-brand-text span{font-size:10.5px;color:var(--muted);}
+  .nav-item{
+    display:flex;align-items:center;gap:11px;padding:11px 13px;margin-bottom:4px;
+    color:var(--muted);font-size:13.5px;font-weight:600;border-left:3px solid transparent;
+    cursor:pointer;transition:all .15s ease;
+  }
+  .nav-item svg{width:17px;height:17px;flex:none;stroke:currentColor;}
+  .nav-item:hover{color:var(--text);background:var(--surface-2);}
+  .nav-item.active{
+    color:#170B04;background:linear-gradient(90deg,var(--accent-2),var(--accent));
+    border-left:3px solid var(--accent-dark);font-family:'Anton',sans-serif;font-weight:400;
+    letter-spacing:.03em;text-transform:uppercase;font-size:12.5px;
+    clip-path:polygon(0 0, calc(100% - 9px) 0, 100% 100%, 0 100%);
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.5);
+  }
+  .nav-item.active svg{stroke:#170B04;}
+  .sb-quote{margin-top:auto;padding:14px 10px;border-top:1px solid var(--line);}
+  .sb-quote p{font-family:'Anton',sans-serif;font-size:13px;text-transform:uppercase;line-height:1.25;margin:0 0 4px;}
+  .sb-quote p span{color:var(--accent-2);}
+  .sb-quote small{color:var(--muted);font-size:10.5px;}
+  .sb-version{font-size:9.5px;color:#4A4A50;margin-top:12px;}
+
+  .bottom-nav{
+    position:fixed;left:0;right:0;bottom:0;z-index:20;background:#101012;border-top:1px solid var(--line);
+    display:flex;justify-content:space-around;padding:8px 4px calc(8px + env(safe-area-inset-bottom));
+  }
+  @media (min-width:900px){ .bottom-nav{display:none;} }
+  .bn-item{display:flex;flex-direction:column;align-items:center;gap:3px;color:var(--muted);font-size:10px;font-weight:700;padding:4px 10px;text-transform:uppercase;letter-spacing:.03em;}
+  .bn-item svg{width:20px;height:20px;stroke:currentColor;}
+  .bn-item.active{color:var(--accent-2);}
+
+  /* ============ MAIN ============ */
+  .main{flex:1;min-width:0;padding-bottom:88px;}
+  @media (min-width:900px){ .main{padding-bottom:0;} }
+  .topbar{display:flex;justify-content:flex-end;gap:10px;align-items:center;padding:16px 20px;border-bottom:1px solid var(--line);}
+  .pill-top{
+    display:flex;align-items:center;gap:6px;height:34px;padding:0 12px;background:var(--surface);border:1px solid var(--line);
+    clip-path:polygon(8px 0,100% 0,100% calc(100% - 8px),calc(100% - 8px) 100%,0 100%,0 8px);font-size:12.5px;font-weight:700;color:var(--text);
+  }
+  .pill-top.flame{color:var(--accent-2);}
+  .pill-top svg{width:14px;height:14px;}
+  .pill-user{gap:8px;padding:0 8px 0 12px;}
+  .pill-user svg.chev{width:12px;height:12px;stroke:var(--muted);}
+  .avatar{
+    width:26px;height:26px;background:var(--surface-2);border:1px solid var(--line);display:flex;align-items:center;justify-content:center;
+    font-size:11px;font-weight:800;clip-path:polygon(6px 0,100% 0,100% calc(100% - 6px),calc(100% - 6px) 100%,0 100%,0 6px);
+  }
+
+  .page{max-width:1120px;margin:0 auto;padding:28px 20px 60px;}
+  .page-head{display:flex;gap:14px;align-items:flex-start;margin-bottom:26px;}
+  .page-icon{
+    width:46px;height:46px;flex:none;background:linear-gradient(160deg,var(--accent-2),var(--accent-dark));
+    clip-path:polygon(9px 0,100% 0,100% calc(100% - 9px),calc(100% - 9px) 100%,0 100%,0 9px);
+    display:flex;align-items:center;justify-content:center;box-shadow:inset 0 1px 0 rgba(255,255,255,.4);
+  }
+  .page-icon svg{width:22px;height:22px;stroke:#170B04;}
+  .page-head h1{font-family:'Anton',sans-serif;font-weight:400;text-transform:uppercase;font-size:26px;margin:2px 0 4px;}
+  .page-head p{color:var(--muted);font-size:13.5px;margin:0;}
+
+  /* stat cards */
+  .stat-grid{display:grid;grid-template-columns:1fr;gap:16px;margin-bottom:32px;}
+  @media (min-width:760px){ .stat-grid{grid-template-columns:repeat(3,1fr);} }
+  .stat-card{background:var(--surface);border:1px solid var(--line);padding:20px 22px;}
+  .stat-head{display:flex;align-items:center;gap:11px;margin-bottom:16px;}
+  .stat-ic{
+    width:34px;height:34px;flex:none;background:var(--surface-3);border:1px solid var(--line);
+    display:flex;align-items:center;justify-content:center;
+    clip-path:polygon(7px 0,100% 0,100% calc(100% - 7px),calc(100% - 7px) 100%,0 100%,0 7px);
+  }
+  .stat-ic svg{width:16px;height:16px;}
+  .ic-gold{stroke:var(--gold);}
+  .ic-accent{stroke:var(--accent-2);}
+  .stat-head span{font-family:'Anton',sans-serif;font-size:11.5px;letter-spacing:.1em;color:var(--muted);}
+  .stat-empty{color:#6C6C74;font-size:13.5px;}
+  .stat-value{font-family:'Anton',sans-serif;font-size:32px;letter-spacing:.01em;margin-bottom:4px;}
+  .stat-sub{color:var(--muted);font-size:12px;}
+
+  /* histórico */
+  .hist-title{
+    display:flex;align-items:center;gap:8px;font-family:'Anton',sans-serif;font-size:12.5px;
+    letter-spacing:.12em;color:var(--text);margin:0 0 14px;
+  }
+  .hist-title svg{width:15px;height:15px;stroke:var(--accent-2);}
+
+  .exec-item{background:var(--surface);border:1px solid var(--line);margin-bottom:12px;overflow:hidden;}
+  .exec-row{
+    display:flex;align-items:center;gap:14px;padding:16px 18px;cursor:pointer;user-select:none;
+  }
+  .exec-ic{
+    width:38px;height:38px;flex:none;background:var(--surface-3);border:1px solid var(--line);
+    display:flex;align-items:center;justify-content:center;
+    clip-path:polygon(8px 0,100% 0,100% calc(100% - 8px),calc(100% - 8px) 100%,0 100%,0 8px);
+  }
+  .exec-ic svg{width:16px;height:16px;stroke:var(--accent-2);}
+  .exec-info{flex:1;min-width:0;}
+  .exec-info b{font-size:14.5px;display:block;}
+  .exec-info span{font-size:12px;color:var(--muted);}
+  .exec-right{display:flex;align-items:center;gap:12px;flex:none;}
+  .exec-dur{
+    font-family:'Anton',sans-serif;font-size:13px;letter-spacing:.02em;color:var(--text);
+    background:var(--surface-3);border:1px solid var(--line);padding:5px 11px;
+    clip-path:polygon(6px 0,100% 0,100% calc(100% - 6px),calc(100% - 6px) 100%,0 100%,0 6px);
+  }
+  .exec-chev{width:16px;height:16px;stroke:var(--muted);transition:transform .2s ease;flex:none;}
+  .exec-item.open .exec-chev{transform:rotate(180deg);}
+
+  .exec-body{
+    max-height:0;overflow:hidden;transition:max-height .25s ease;
+    border-top:1px solid transparent;
+  }
+  .exec-item.open .exec-body{max-height:300px;border-top:1px solid var(--line);}
+  .exec-body-inner{padding:16px 18px;font-size:13px;color:var(--muted);text-align:center;}
+
+  .set-mini-table{width:100%;border-collapse:collapse;font-size:13px;}
+  .set-mini-table th{
+    text-align:left;font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:#6C6C74;
+    font-weight:700;padding:0 8px 8px;border-bottom:1px solid var(--line);
+  }
+  .set-mini-table td{padding:9px 8px;border-bottom:1px solid var(--line);}
+  .set-mini-table tr:last-child td{border-bottom:none;}
+  .valid-chip{
+    font-size:10.5px;font-weight:800;color:#3DBE6C;background:rgba(61,190,108,.1);
+    border:1px solid rgba(61,190,108,.35);padding:2px 8px;display:inline-block;
+  }
+</style>
+</head>
+<body>
+
+  <aside class="sidebar">
+    <div class="sb-brand">
+      <div class="sb-logo"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#170B04" stroke-width="2.5"><path d="M6.5 6.5h11v11h-11z"/><path d="M3 10v4M21 10v4"/></svg></div>
+      <div class="sb-brand-text"><b>FITNESSAPP</b><span>Treinos &amp; Dieta</span></div>
+    </div>
+    <div class="nav-item"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M3 11l9-8 9 8"/><path d="M5 10v10h14V10"/></svg>Início</div>
+    <div class="nav-item"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M6 7v10M18 7v10M2 12h4M18 12h4M6 12h12"/></svg>Treino</div>
+    <div class="nav-item"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>Dieta</div>
+    <div class="nav-item active"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M4 20V10M12 20V4M20 20v-7"/></svg>Progressão</div>
+    <div class="sb-quote">
+      <p>Disciplina, foco, <span>constância, resultados.</span></p>
+      <small>Construa hoje a sua melhor versão.</small>
+      <div class="sb-version">v1.0.0</div>
+    </div>
+  </aside>
+
+  <div class="main">
+    <div class="topbar">
+      <div class="pill-top flame"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2c1 3-2 4-2 7a4 4 0 108 0c0-1-1-2-1-2 2 1 3 3 3 5a8 8 0 11-16 0c0-4 3-6 4-8 0 0 0 2 1 3 0-2 1-4 3-5z"/></svg>3</div>
+      <div class="pill-top">2</div>
+      <div class="pill-top pill-user">
+        213123123123
+        <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M6 9l6 6 6-6"/></svg>
+      </div>
+    </div>
+
+    <div class="page">
+      <div class="page-head">
+        <div class="page-icon"><svg viewBox="0 0 24 24" fill="none" stroke-width="2.4"><path d="M4 20V10M12 20V4M20 20v-7"/></svg></div>
+        <div>
+          <h1>Progressão</h1>
+          <p>Cada treino finalizado comparado com a execução anterior do mesmo treino.</p>
+        </div>
+      </div>
+
+      <div class="stat-grid">
+        <div class="stat-card">
+          <div class="stat-head">
+            <div class="stat-ic"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" class="ic-gold"><path d="M8 21h8M12 17v4M7 4h10v4a5 5 0 01-10 0V4z"/><path d="M7 5H4a3 3 0 003 3M17 5h3a3 3 0 01-3 3"/></svg></div>
+            <span>MAIOR EVOLUÇÃO</span>
+          </div>
+          <p class="stat-empty">Sem evoluções nos últimos 30 dias.</p>
+        </div>
+
+        <div class="stat-card">
+          <div class="stat-head">
+            <div class="stat-ic"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" class="ic-accent"><rect x="4" y="5" width="16" height="16" rx="1"/><path d="M4 9h16M8 3v4M16 3v4"/></svg></div>
+            <span>TREINOS REALIZADOS</span>
+          </div>
+          <div class="stat-value">13</div>
+          <div class="stat-sub">nos últimos 30 dias</div>
+        </div>
+
+        <div class="stat-card">
+          <div class="stat-head">
+            <div class="stat-ic"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" class="ic-accent"><path d="M6 7v10M18 7v10M2 12h4M18 12h4M6 12h12"/></svg></div>
+            <span>VOLUME TOTAL MOVIDO</span>
+          </div>
+          <div class="stat-value">0 kg</div>
+          <div class="stat-sub">nos últimos 30 dias</div>
+        </div>
+      </div>
+
+      <p class="hist-title">
+        <svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M3 17l5-5 4 4 8-8M14 8h6v6"/></svg>
+        HISTÓRICO DE EXECUÇÕES
+      </p>
+
+      <div class="exec-list">
+        <div class="exec-item open">
+          <div class="exec-row" onclick="this.parentElement.classList.toggle('open')">
+            <div class="exec-ic"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg></div>
+            <div class="exec-info"><b>asd</b><span>23 de ago. de 26 · 12:36</span></div>
+            <div class="exec-right">
+              <span class="exec-dur">36s</span>
+              <svg class="exec-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M6 9l6 6 6-6"/></svg>
+            </div>
+          </div>
+          <div class="exec-body"><div class="exec-body-inner">Nenhuma série registrada nesta sessão.</div></div>
+        </div>
+
+        <div class="exec-item">
+          <div class="exec-row" onclick="this.parentElement.classList.toggle('open')">
+            <div class="exec-ic"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg></div>
+            <div class="exec-info"><b>asd</b><span>23 de ago. de 26 · 12:34</span></div>
+            <div class="exec-right">
+              <span class="exec-dur">31min 07s</span>
+              <svg class="exec-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M6 9l6 6 6-6"/></svg>
+            </div>
+          </div>
+          <div class="exec-body"><div class="exec-body-inner">
+            <table class="set-mini-table">
+              <thead><tr><th>#</th><th>Reps</th><th>Carga</th><th>Status</th></tr></thead>
+              <tbody>
+                <tr><td>1</td><td>10</td><td>40 kg</td><td><span class="valid-chip">Válida</span></td></tr>
+                <tr><td>2</td><td>9</td><td>40 kg</td><td><span class="valid-chip">Válida</span></td></tr>
+              </tbody>
+            </table>
+          </div></div>
+        </div>
+
+        <div class="exec-item">
+          <div class="exec-row" onclick="this.parentElement.classList.toggle('open')">
+            <div class="exec-ic"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg></div>
+            <div class="exec-info"><b>asd</b><span>23 de ago. de 26 · 12:04</span></div>
+            <div class="exec-right">
+              <span class="exec-dur">53s</span>
+              <svg class="exec-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M6 9l6 6 6-6"/></svg>
+            </div>
+          </div>
+          <div class="exec-body"><div class="exec-body-inner">Nenhuma série registrada nesta sessão.</div></div>
+        </div>
+
+        <div class="exec-item">
+          <div class="exec-row" onclick="this.parentElement.classList.toggle('open')">
+            <div class="exec-ic"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg></div>
+            <div class="exec-info"><b>asd</b><span>23 de ago. de 26 · 12:04</span></div>
+            <div class="exec-right">
+              <span class="exec-dur">42s</span>
+              <svg class="exec-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M6 9l6 6 6-6"/></svg>
+            </div>
+          </div>
+          <div class="exec-body"><div class="exec-body-inner">Nenhuma série registrada nesta sessão.</div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <nav class="bottom-nav">
+    <div class="bn-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 11l9-8 9 8"/><path d="M5 10v10h14V10"/></svg>Início</div>
+    <div class="bn-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 7v10M18 7v10M2 12h4M18 12h4M6 12h12"/></svg>Treino</div>
+    <div class="bn-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>Dieta</div>
+    <div class="bn-item active"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 20V10M12 20V4M20 20v-7"/></svg>Progressão</div>
+  </nav>
+
+</body>
+</html>

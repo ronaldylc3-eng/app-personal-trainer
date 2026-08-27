@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<title>FitnessApp — Criar senha</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Anton&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#0A0A0B;
+    --surface:#151517;
+    --surface-2:#1C1C20;
+    --line:#28282D;
+    --text:#F3F2EF;
+    --muted:#8E8E96;
+    --accent:#FF5A1F;
+    --accent-2:#FF7A3D;
+    --accent-dark:#8A2A0A;
+    --ok:#3DBE6C;
+  }
+  *{box-sizing:border-box;}
+  html,body{height:100%;margin:0;}
+  body{
+    background:var(--bg);
+    color:var(--text);
+    font-family:'Inter',sans-serif;
+    display:flex;
+    flex-direction:column;
+    min-height:100vh;
+  }
+  @media (min-width:900px){ body{flex-direction:row;} }
+
+  /* ===== IMAGEM — banner no mobile, coluna cheia no desktop ===== */
+  .side-visual{
+    position:relative;overflow:hidden;flex:none;
+    height:34vh;min-height:190px;max-height:280px;
+    border-bottom:1px solid var(--line);
+  }
+  @media (min-width:900px){
+    .side-visual{flex:1.1;height:auto;max-height:none;min-height:100vh;border-bottom:none;border-right:1px solid var(--line);}
+  }
+  .side-visual .bg{
+    position:absolute;inset:0;
+    background-image:url('https://images.unsplash.com/photo-1534438327276-14e5300c3a48?q=80&w=1400&auto=format&fit=crop');
+    background-size:cover;background-position:center 40%;
+    filter:grayscale(1) contrast(1.15) brightness(.5);
+  }
+  .side-visual .scrim{
+    position:absolute;inset:0;
+    background:linear-gradient(180deg, rgba(10,10,11,.25) 0%, rgba(10,10,11,.55) 60%, rgba(10,10,11,.97) 100%);
+  }
+  @media (min-width:900px){
+    .side-visual .scrim{background:linear-gradient(180deg, rgba(10,10,11,.35) 0%, rgba(10,10,11,.55) 55%, rgba(10,10,11,.96) 100%);}
+  }
+  .side-visual .stripe{
+    position:absolute;left:0;top:0;bottom:0;width:45%;
+    background:repeating-linear-gradient(115deg, rgba(255,90,31,.10) 0 3px, transparent 3px 26px);
+    mix-blend-mode:screen;pointer-events:none;
+  }
+  .side-content{
+    position:relative;z-index:2;height:100%;
+    display:flex;flex-direction:column;justify-content:flex-end;
+    padding:20px 22px;
+  }
+  @media (min-width:900px){ .side-content{padding:56px;} }
+
+  .mini-brand{display:flex;align-items:center;gap:8px;margin-bottom:auto;padding-top:16px;}
+  @media (min-width:900px){ .mini-brand{display:none;} }
+  .mini-brand-logo{
+    width:26px;height:26px;flex:none;
+    background:linear-gradient(160deg,var(--accent-2),var(--accent-dark));
+    clip-path:polygon(6px 0,100% 0,100% calc(100% - 6px),calc(100% - 6px) 100%,0 100%,0 6px);
+    display:flex;align-items:center;justify-content:center;
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.4);
+  }
+  .mini-brand span{font-family:'Anton',sans-serif;font-size:13px;letter-spacing:.03em;}
+
+  .side-eyebrow{
+    display:none;align-items:center;gap:8px;
+    font-family:'Anton',sans-serif;font-size:11px;letter-spacing:.18em;
+    color:var(--accent-2);margin-bottom:8px;width:fit-content;
+  }
+  .side-eyebrow::before{content:"";width:20px;height:2px;background:var(--accent);}
+  @media (min-width:900px){ .side-eyebrow{display:inline-flex;} }
+
+  .side-content h1{
+    font-family:'Anton',sans-serif;font-weight:400;text-transform:uppercase;
+    font-size:26px;line-height:1.05;margin:0;max-width:420px;
+  }
+  .side-content h1 em{font-style:normal;color:var(--accent-2);}
+  .side-content p{color:#C9C8CC;font-size:14px;max-width:360px;line-height:1.6;margin:10px 0 0;display:none;}
+  @media (min-width:900px){
+    .side-content h1{font-size:42px;}
+    .side-content p{display:block;}
+  }
+
+  /* ===== FORM ===== */
+  .side-form{
+    flex:1;display:flex;align-items:center;justify-content:center;
+    padding:32px 20px 44px;position:relative;
+  }
+  @media (min-width:900px){ .side-form{padding:40px 24px;} }
+  .side-form::before{
+    content:"";position:absolute;inset:0;
+    background:radial-gradient(ellipse 600px 400px at 80% 0%, rgba(255,90,31,.06), transparent 60%);
+    pointer-events:none;
+  }
+  .form-box{width:100%;max-width:380px;position:relative;z-index:2;}
+
+  .brand{display:none;align-items:center;gap:10px;margin-bottom:44px;}
+  @media (min-width:900px){ .brand{display:flex;} }
+  .brand-logo{
+    width:38px;height:38px;flex:none;
+    background:linear-gradient(160deg,var(--accent-2),var(--accent-dark));
+    clip-path:polygon(8px 0,100% 0,100% calc(100% - 8px),calc(100% - 8px) 100%,0 100%,0 8px);
+    display:flex;align-items:center;justify-content:center;
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.4);
+  }
+  .brand-text b{font-family:'Anton',sans-serif;font-size:15px;letter-spacing:.03em;display:block;}
+  .brand-text span{font-size:11px;color:var(--muted);}
+
+  .form-eyebrow{font-family:'Anton',sans-serif;font-size:12px;letter-spacing:.14em;color:var(--accent-2);margin:0 0 8px;}
+  .form-box h2{font-family:'Anton',sans-serif;font-weight:400;text-transform:uppercase;font-size:26px;margin:0 0 8px;}
+  .form-box>p.hint{color:var(--muted);font-size:13.5px;line-height:1.5;margin:0 0 8px;}
+  .form-box>p.hint b{color:var(--text);}
+  .form-box>p.hint-email{
+    display:inline-flex;align-items:center;gap:6px;
+    font-size:12.5px;color:var(--accent-2);background:rgba(255,90,31,.08);
+    border:1px solid rgba(255,90,31,.25);padding:6px 12px;margin:0 0 28px;
+  }
+
+  .field{margin-bottom:16px;}
+  .field label{
+    display:block;font-size:11px;letter-spacing:.08em;text-transform:uppercase;
+    color:var(--muted);font-weight:700;margin-bottom:8px;
+  }
+  .field-input{
+    position:relative;background:var(--surface);border:1px solid var(--line);
+    display:flex;align-items:center;
+    clip-path:polygon(10px 0,100% 0,100% calc(100% - 10px),calc(100% - 10px) 100%,0 100%,0 10px);
+    transition:border-color .15s ease;
+  }
+  .field-input:focus-within{border-color:var(--accent);}
+  .field-input.valid{border-color:var(--ok);}
+  .field-input svg.lock-ic{width:16px;height:16px;margin-left:14px;stroke:var(--muted);flex:none;}
+  .field-input input{
+    width:100%;background:none;border:none;outline:none;
+    color:var(--text);font-family:'Inter',sans-serif;font-size:14px;
+    padding:15px 10px;
+  }
+  .field-input input::placeholder{color:#5D5D64;}
+  .toggle-eye{
+    background:none;border:none;cursor:pointer;padding:0 14px;
+    display:flex;align-items:center;color:var(--muted);flex:none;
+  }
+  .toggle-eye svg{width:17px;height:17px;stroke:currentColor;}
+  .toggle-eye:hover{color:var(--text);}
+
+  /* checklist de requisitos */
+  .req-list{list-style:none;margin:2px 0 22px;padding:0;display:grid;grid-template-columns:1fr 1fr;gap:6px 14px;}
+  .req-list li{
+    font-size:12px;color:var(--muted);display:flex;align-items:center;gap:6px;
+  }
+  .req-list li svg{width:13px;height:13px;stroke:#4A4A50;flex:none;}
+  .req-list li.met{color:var(--ok);}
+  .req-list li.met svg{stroke:var(--ok);}
+
+  .btn{
+    font-family:'Anton',sans-serif;font-weight:400;text-transform:uppercase;
+    letter-spacing:.06em;font-size:15px;border:none;cursor:pointer;
+    display:inline-flex;align-items:center;justify-content:center;gap:10px;
+    transition:transform .12s ease, filter .12s ease;width:100%;
+  }
+  .btn:active{transform:translateY(2px) scale(.995);}
+  .btn-primary{
+    height:54px;color:#150800;
+    background:linear-gradient(180deg,var(--accent-2) 0%, var(--accent) 55%, var(--accent-dark) 100%);
+    clip-path:polygon(14px 0,100% 0,100% calc(100% - 14px),calc(100% - 14px) 100%,0 100%,0 14px);
+    box-shadow:inset 0 2px 0 rgba(255,255,255,.55), inset 0 -10px 14px rgba(0,0,0,.35), 0 10px 24px -8px rgba(255,90,31,.55);
+  }
+  .btn-primary:hover{filter:brightness(1.08);}
+
+  .footer-note{margin-top:24px;font-size:12.5px;color:#5D5D64;text-align:center;line-height:1.5;}
+  .footer-note a{color:var(--accent-2);text-decoration:none;font-weight:600;}
+</style>
+</head>
+<body>
+
+  <div class="side-visual">
+    <div class="bg"></div>
+    <div class="scrim"></div>
+    <div class="stripe"></div>
+    <div class="side-content">
+      <div class="mini-brand">
+        <div class="mini-brand-logo">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#170B04" stroke-width="3"><path d="M6.5 6.5h11v11h-11z"/><path d="M3 10v4M21 10v4"/></svg>
+        </div>
+        <span>FITNESSAPP</span>
+      </div>
+      <p class="side-eyebrow">FITNESSAPP · TREINOS &amp; DIETA</p>
+      <h1>Falta pouco.<br>Só a <em>senha.</em></h1>
+      <p>Crie uma senha forte pra proteger sua ficha, sua dieta e sua evolução.</p>
+    </div>
+  </div>
+
+  <div class="side-form">
+    <div class="form-box">
+      <div class="brand">
+        <div class="brand-logo">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#170B04" stroke-width="2.5"><path d="M6.5 6.5h11v11h-11z"/><path d="M3 10v4M21 10v4"/></svg>
+        </div>
+        <div class="brand-text">
+          <b>FITNESSAPP</b>
+          <span>Treinos &amp; Dieta</span>
+        </div>
+      </div>
+
+      <p class="form-eyebrow">PRIMEIRO ACESSO</p>
+      <h2>Criar sua senha</h2>
+      <p class="hint">Defina a senha da sua conta pra concluir o cadastro.</p>
+      <p class="hint-email">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18v12H3z"/><path d="M3 7l9 6 9-6"/></svg>
+        213123123123@email.com
+      </p>
+
+      <form onsubmit="return false;">
+        <div class="field">
+          <label for="senha1">Crie uma senha</label>
+          <div class="field-input">
+            <svg class="lock-ic" viewBox="0 0 24 24" fill="none" stroke-width="2"><rect x="5" y="11" width="14" height="9" rx="1"/><path d="M8 11V7a4 4 0 018 0v4"/></svg>
+            <input id="senha1" type="password" placeholder="Mínimo 8 caracteres">
+            <button type="button" class="toggle-eye" aria-label="Mostrar senha">
+              <svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z"/><circle cx="12" cy="12" r="3"/></svg>
+            </button>
+          </div>
+        </div>
+
+        <div class="field">
+          <label for="senha2">Confirme sua senha</label>
+          <div class="field-input">
+            <svg class="lock-ic" viewBox="0 0 24 24" fill="none" stroke-width="2"><rect x="5" y="11" width="14" height="9" rx="1"/><path d="M8 11V7a4 4 0 018 0v4"/></svg>
+            <input id="senha2" type="password" placeholder="Repita a senha">
+            <button type="button" class="toggle-eye" aria-label="Mostrar senha">
+              <svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z"/><circle cx="12" cy="12" r="3"/></svg>
+            </button>
+          </div>
+        </div>
+
+        <ul class="req-list">
+          <li class="met"><svg viewBox="0 0 24 24" fill="none" stroke-width="3"><path d="M5 12l5 5 9-10"/></svg>8+ caracteres</li>
+          <li><svg viewBox="0 0 24 24" fill="none" stroke-width="3"><path d="M5 12l5 5 9-10"/></svg>1 letra maiúscula</li>
+          <li><svg viewBox="0 0 24 24" fill="none" stroke-width="3"><path d="M5 12l5 5 9-10"/></svg>1 número</li>
+          <li><svg viewBox="0 0 24 24" fill="none" stroke-width="3"><path d="M5 12l5 5 9-10"/></svg>Senhas iguais</li>
+        </ul>
+
+        <button class="btn btn-primary">
+          Salvar e entrar
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+        </button>
+      </form>
+
+      <p class="footer-note">Esse link é de uso único e expira em 24h.<br>Problemas? <a href="#">Fale com a academia</a></p>
+    </div>
+  </div>
+
+</body>
+</html>

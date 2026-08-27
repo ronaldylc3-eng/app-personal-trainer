@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<title>FitnessApp — Story Card</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Anton&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#0A0A0B;--surface:#151517;--line:#28282D;--text:#F3F2EF;--muted:#B9B8BE;
+    --accent:#FF5A1F;--accent-2:#FF7A3D;--accent-dark:#8A2A0A;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;background:#050506;font-family:'Inter',sans-serif;color:var(--text);
+    display:flex;flex-wrap:wrap;align-items:flex-start;gap:36px;padding:44px;
+  }
+  .col{display:flex;flex-direction:column;gap:12px;}
+  .frame-label{font-family:'Anton',sans-serif;font-size:11px;letter-spacing:.14em;color:#8E8E96;text-transform:uppercase;}
+
+  /* ===== STORY CARD 9:16 ===== */
+  .story{
+    position:relative;
+    width:337px;height:600px; /* proporção 1080x1920 escalada */
+    overflow:hidden;
+    background:#000;
+    box-shadow:0 30px 70px -20px rgba(0,0,0,.8);
+  }
+  .story-bg{
+    position:absolute;inset:0;
+    background-image:url('https://images.unsplash.com/photo-1646492169621-d8da8016354a?fm=jpg&q=80&w=1200&auto=format&fit=crop');
+    background-size:cover;background-position:center 38%;
+    filter:grayscale(1) contrast(1.25) brightness(1.02);
+  }
+  .story-scrim-top{
+    position:absolute;left:0;right:0;top:0;height:16%;
+    background:linear-gradient(180deg, rgba(0,0,0,.65) 0%, rgba(0,0,0,0) 100%);
+  }
+  .story-scrim-bottom{
+    position:absolute;left:0;right:0;bottom:0;height:8%;
+    background:linear-gradient(0deg, rgba(6,6,7,.55) 0%, rgba(6,6,7,0) 100%);
+  }
+  .story-stripe{
+    position:absolute;left:0;top:0;bottom:0;width:100%;
+    background:repeating-linear-gradient(115deg, rgba(255,90,31,.10) 0 3px, transparent 3px 30px);
+    mix-blend-mode:screen;pointer-events:none;
+  }
+
+  .story-content{position:relative;z-index:2;height:100%;display:flex;flex-direction:column;padding:22px 20px;}
+
+  /* topo: marca — com leve backing pra ler sobre a foto clara */
+  .story-brand{
+    display:flex;align-items:center;gap:9px;
+    background:rgba(6,6,7,.55);border:1px solid rgba(255,255,255,.08);
+    padding:8px 10px;width:fit-content;
+    backdrop-filter:blur(3px);
+  }
+  .story-logo{
+    width:30px;height:30px;flex:none;background:linear-gradient(160deg,var(--accent-2),var(--accent-dark));
+    clip-path:polygon(6px 0,100% 0,100% calc(100% - 6px),calc(100% - 6px) 100%,0 100%,0 6px);
+    display:flex;align-items:center;justify-content:center;box-shadow:inset 0 1px 0 rgba(255,255,255,.5);
+  }
+  .story-brand b{font-family:'Anton',sans-serif;font-size:13.5px;letter-spacing:.03em;display:block;color:#fff;}
+  .story-brand span{font-size:9.5px;color:#C9C8CC;}
+
+  .story-top-row{display:flex;align-items:center;gap:9px;}
+  .status-chip{
+    font-size:9px;font-weight:800;letter-spacing:.08em;color:var(--accent-2);
+    border:1px solid rgba(255,90,31,.5);background:rgba(6,6,7,.6);padding:6px 10px;text-transform:uppercase;
+    display:flex;align-items:center;gap:5px;backdrop-filter:blur(3px);margin-left:auto;
+  }
+  .status-chip::before{content:"";width:5px;height:5px;border-radius:50%;background:var(--accent-2);}
+
+  /* espaço vazio pro meio (foto aparece) */
+  .story-spacer{flex:1;}
+
+  /* rodapé: painel sólido só atrás do texto — a foto continua visível ao redor */
+  .story-footer{
+    display:flex;flex-direction:column;gap:13px;
+    background:rgba(6,6,7,.82);
+    border:1px solid rgba(255,255,255,.08);
+    border-left:3px solid var(--accent);
+    padding:16px 16px 14px;
+    backdrop-filter:blur(4px);
+  }
+
+  .wo-eyebrow{
+    font-family:'Anton',sans-serif;font-size:10.5px;letter-spacing:.18em;color:var(--accent-2);
+    display:flex;align-items:center;gap:7px;
+  }
+  .wo-eyebrow::before{content:"";width:18px;height:2px;background:var(--accent);}
+  .wo-title{font-family:'Anton',sans-serif;font-weight:400;text-transform:uppercase;font-size:26px;line-height:1.05;color:#fff;margin:2px 0 0;}
+  .wo-sub{font-size:12.5px;color:#D8D7DC;margin:2px 0 0;}
+
+  .stat-row{display:flex;gap:9px;}
+  .stat-chip{
+    flex:1;background:rgba(21,21,23,.85);border:1px solid rgba(255,255,255,.08);
+    backdrop-filter:blur(2px);
+    padding:10px 12px;
+    clip-path:polygon(8px 0,100% 0,100% calc(100% - 8px),calc(100% - 8px) 100%,0 100%,0 8px);
+  }
+  .stat-chip .lbl{font-size:9px;color:#9A9AA2;text-transform:uppercase;letter-spacing:.05em;font-weight:700;margin-bottom:3px;display:flex;align-items:center;gap:4px;}
+  .stat-chip .lbl svg{width:10px;height:10px;stroke:var(--accent-2);}
+  .stat-chip .val{font-family:'Anton',sans-serif;font-size:19px;color:#fff;letter-spacing:.01em;}
+
+  .pr-card{
+    display:flex;align-items:center;gap:11px;
+    background:linear-gradient(90deg, rgba(255,90,31,.16), rgba(255,90,31,.02));
+    border:1px solid rgba(255,90,31,.35);
+    padding:11px 13px;
+  }
+  .pr-ic{
+    width:30px;height:30px;flex:none;background:linear-gradient(160deg,var(--accent-2),var(--accent-dark));
+    clip-path:polygon(6px 0,100% 0,100% calc(100% - 6px),calc(100% - 6px) 100%,0 100%,0 6px);
+    display:flex;align-items:center;justify-content:center;
+  }
+  .pr-ic svg{width:14px;height:14px;stroke:#170B04;stroke-width:2.6;}
+  .pr-text .lbl{font-size:9px;color:var(--accent-2);text-transform:uppercase;letter-spacing:.06em;font-weight:800;margin-bottom:2px;}
+  .pr-text .val{font-size:13.5px;font-weight:800;color:#fff;}
+
+  .story-watermark{
+    display:flex;justify-content:space-between;align-items:center;
+    padding-top:6px;font-size:9.5px;color:#8E8E96;
+  }
+  .story-watermark b{color:#C9C8CC;font-weight:700;}
+
+  /* ===== NOTE ===== */
+  .note{max-width:420px;background:var(--surface);border:1px solid var(--line);padding:16px 18px;font-size:13px;color:#9A9AA2;line-height:1.6;}
+  .note b{color:var(--text);}
+</style>
+</head>
+<body>
+
+<div class="col">
+  <p class="frame-label">STORY CARD · 9:16</p>
+  <div class="story">
+    <div class="story-bg"></div>
+    <div class="story-scrim-top"></div>
+    <div class="story-scrim-bottom"></div>
+    <div class="story-stripe"></div>
+
+    <div class="story-content">
+      <div class="story-top-row">
+        <div class="story-brand">
+          <div class="story-logo"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#170B04" stroke-width="2.8"><path d="M6.5 6.5h11v11h-11z"/><path d="M3 10v4M21 10v4"/></svg></div>
+          <div><b>FITNESSAPP</b><span>Treinos &amp; Dieta</span></div>
+        </div>
+        <span class="status-chip">Finalizado</span>
+      </div>
+
+      <div class="story-spacer"></div>
+
+      <div class="story-footer">
+        <div>
+          <p class="wo-eyebrow">TREINO FINALIZADO</p>
+          <h2 class="wo-title">Treino A</h2>
+          <p class="wo-sub">Peito &amp; Tríceps</p>
+        </div>
+
+        <div class="stat-row">
+          <div class="stat-chip">
+            <div class="lbl"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>Duração</div>
+            <div class="val">54 min</div>
+          </div>
+          <div class="stat-chip">
+            <div class="lbl"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 7v10M18 7v10M2 12h4M18 12h4M6 12h12"/></svg>Volume</div>
+            <div class="val">12.450 kg</div>
+          </div>
+        </div>
+
+        <div class="pr-card">
+          <div class="pr-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M13 2L3 14h7l-1 8 10-12h-7l1-8z"/></svg></div>
+          <div class="pr-text">
+            <div class="lbl">Maior carga do dia</div>
+            <div class="val">Supino Reto — 100 kg</div>
+          </div>
+        </div>
+
+        <div class="story-watermark">
+          <span>Feito com <b>FitnessApp</b></span>
+          <span>23 ago 2026</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="col" style="max-width:420px;">
+  <p class="frame-label">SOBRE ESSE CARTÃO</p>
+  <div class="note">
+    <b>Formato:</b> 9:16 (proporção de Stories/Status do Instagram e WhatsApp). Aqui está escalado pra caber na tela — pra exportar de verdade, gere a mesma composição em 1080×1920px.<br><br>
+    <b>Foto de fundo:</b> academia/barra em preto e branco, com escurecimento maior no topo e na base (onde tem texto/logo) e mais visível no meio — assim a foto aparece de verdade, mas o texto continua 100% legível.<br><br>
+    <b>Dados exibidos:</b> nome do treino, duração, volume total levantado e o exercício de maior carga do dia — troque pelos campos reais que sua ficha já calcula (duração da sessão, Σ carga×reps das séries válidas, e a série com maior carga registrada).<br><br>
+    <b>Variação:</b> se preferir mostrar "Total de Séries Válidas" em vez de Volume, é só trocar o valor do segundo chip — a estrutura visual continua igual.
+  </div>
+</div>
+
+</body>
+</html>

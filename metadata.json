@@ -1,0 +1,6 @@
+{
+  "name": "Fitness App",
+  "description": "Aplicativo de gestão de treinos, dieta, avaliação física e prontuário de alunos para personal trainers e atletas.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
