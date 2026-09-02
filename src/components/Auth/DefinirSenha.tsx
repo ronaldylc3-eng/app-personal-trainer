@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { Lock, ArrowRight, Loader2, Eye, EyeOff, Check, AlertCircle, Mail } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { auth, usuarios } from '../../services/api';
-import AuthLayout, { BrandLogo } from './AuthLayout';
+import AuthLayout from './AuthLayout';
 
 const SENHA_IMAGE_FALLBACK = 'https://images.unsplash.com/photo-1534438327276-14e5300c3a48?q=80&w=1400&auto=format&fit=crop';
 
@@ -52,12 +52,15 @@ export default function DefinirSenha() {
       await auth.updatePassword(password);
       const user = await auth.getUser();
       if (user) {
-        await usuarios.update(user.id, { status: 'ativo' });
+        const usuario = await usuarios.getByAuthId(user.id);
+        if (usuario) {
+          await usuarios.update(usuario.id, { status: 'ativo' });
+        }
       }
 
-      setSuccess('Senha cadastrada com sucesso! Redirecionando para o login...');
+      setSuccess('Senha cadastrada com sucesso!');
       await auth.signOut();
-      setTimeout(() => navigate('/'), 2000);
+      setTimeout(() => navigate('/login', { replace: true }), 2000);
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Erro ao cadastrar senha';
       setError(message);

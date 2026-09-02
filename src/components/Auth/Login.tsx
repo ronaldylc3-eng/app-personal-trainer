@@ -50,7 +50,7 @@ export default function Login() {
       image="/auth/login.jpg"
       fallbackImage={LOGIN_IMAGE_FALLBACK}
       imagePosition="center 32%"
-      eyebrow="FITNESSAPP · ACESSO"
+      eyebrow="LOS GYM · ACESSO"
       title={<>Sua ficha.<br />Seu <em>ritmo.</em></>}
       description="Entre pra ver seu treino de hoje, registrar a refeição e acompanhar sua evolução."
       stats={[
@@ -171,7 +171,7 @@ export default function Login() {
       </form>
 
       <p className="mt-8 text-[12.5px] text-[#5D5D64] text-center">
-        FitnessApp · Treinos e Acompanhamento
+        LOS GYM · Treinos e Acompanhamento
       </p>
     </AuthLayout>
   );

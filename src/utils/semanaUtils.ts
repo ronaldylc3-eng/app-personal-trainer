@@ -133,3 +133,69 @@ export function formatarDuracaoExtensa(segundos: number): string {
 
   return `${totalMin} min${segRestantes > 0 ? ` ${segRestantes}s` : ''}`;
 }
+
+// =============================================================
+// Helpers no fuso America/Sao_Paulo (independentes do fuso do device)
+// =============================================================
+
+const FUSO_SP = 'America/Sao_Paulo';
+
+/**
+ * Data por extenso no fuso de Sao Paulo, formato ISO 'YYYY-MM-DD'
+ */
+export function dataSP(iso: string | Date): string {
+  const d = typeof iso === 'string' ? new Date(iso) : iso;
+  if (Number.isNaN(d.getTime())) return '';
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: FUSO_SP,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(d);
+}
+
+/**
+ * Data de HOJE no fuso de Sao Paulo, formato ISO 'YYYY-MM-DD'
+ */
+export function hojeSP(): string {
+  return dataSP(new Date());
+}
+
+/**
+ * Dia da semana (0=Domingo .. 6=Sabado) atual no fuso de Sao Paulo
+ */
+export function diaSemanaSP(ref: Date = new Date()): number {
+  const curto = new Intl.DateTimeFormat('en-US', { timeZone: FUSO_SP, weekday: 'short' }).format(ref);
+  const mapa: Record<string, number> = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
+  const val = mapa[curto];
+  return val !== undefined ? val : ref.getDay();
+}
+
+/**
+ * Hora no formato 'HH:MM' no fuso de Sao Paulo
+ */
+export function formatarHorarioSP(iso: string): string {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  return new Intl.DateTimeFormat('pt-BR', {
+    timeZone: FUSO_SP,
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).format(d);
+}
+
+/**
+ * Data ISO de um dia da semana (0=Domingo..6=Sabado) dentro da semana
+ * corrente em Sao Paulo. Retorna 'YYYY-MM-DD' ou '' se invalido.
+ */
+export function dataDeDiaSemana(diaSemana: number): string {
+  const d = new Date();
+  const atual = diaSemanaSP(d);
+  const diff = diaSemana - atual;
+  const alvo = new Date(d);
+  alvo.setUTCHours(12, 0, 0, 0);
+  alvo.setUTCDate(alvo.getUTCDate() + diff);
+  return dataSP(alvo);
+}

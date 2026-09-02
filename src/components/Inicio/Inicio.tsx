@@ -1,14 +1,17 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
-  AlertCircle, Apple, ArrowRight, CalendarCheck, CalendarDays, Check, Clock,
-  Dumbbell, Flame, Loader2, Lock, Moon, Pencil, TrendingUp, X,
+  AlertCircle, ArrowRight, CalendarCheck, CalendarDays, Check, Clock,
+  Flame, Loader2, Lock, Moon, TrendingUp, X,
 } from 'lucide-react';
+import StudentAvatar from '../ui/StudentAvatar';
 import { useAuth } from '../../hooks/useAuth';
 import { useSequencia } from '../../hooks/useSequencia';
 import { fichas, dieta, logsExecucao, planejamento, METAS_PADRAO } from '../../services/api';
 import { DIA_MS } from '../../utils/consistencia';
 import { DAYS_OF_WEEK, DAYS_SHORT } from '../../types';
+import { dataDeDiaSemana, dataSP as dataSPFuso } from '../../utils/semanaUtils';
+import { BarraOlimpicaIcon, TalherFolhaIcon, CalendarioCanetaIcon } from '../icons/AppIcons';
 import type {
   FichaCompleta, MetasNutricionais, PlanejamentoItem,
   SessaoComProgresso, ExercicioSessao, Meal,
@@ -79,6 +82,7 @@ export default function Inicio() {
   const [consumoHoje, setConsumoHoje] = useState<Meal[]>([]);
   const [metas, setMetas] = useState<MetasNutricionais>(null);
   const [maiorSalto, setMaiorSalto] = useState<ExercicioSessao | null>(null);
+  const [progressoSessoes, setProgressoSessoes] = useState<SessaoComProgresso[]>([]);
   const [planoSemana, setPlanoSemana] = useState<PlanejamentoItem[]>([]);
   const [modalUpgrade, setModalUpgrade] = useState(false);
   const [modalPlanejamento, setModalPlanejamento] = useState(false);
@@ -93,7 +97,10 @@ export default function Inicio() {
     const tarefas: Promise<void>[] = [
       fichas.getAtiva(userId, 'treino').then(f => { if (!cancel) setFichaTreino(f); }),
       logsExecucao.getProgresso(userId).then(p => {
-        if (!cancel) setMaiorSalto(extrairMaiorSalto(p));
+        if (!cancel) {
+          setMaiorSalto(extrairMaiorSalto(p));
+          setProgressoSessoes(p);
+        }
       }),
       planejamento.get(userId).then(rows => { if (!cancel) setPlanoSemana(rows); }),
     ];
@@ -137,6 +144,17 @@ export default function Inicio() {
       .filter((t): t is NonNullable<typeof t> => !!t);
   }, [planoHoje, fichaTreino]);
 
+  // Treino(s) concluído(s) na data daquele dia da semana (fuso SP)
+  const concluidoPorData = useMemo(() => {
+    const set = new Set<string>();
+    for (const s of progressoSessoes) {
+      if (!s.treino_id) continue;
+      const d = dataSPFuso(s.data_execucao);
+      if (d) set.add(`${s.treino_id}|${d}`);
+    }
+    return set;
+  }, [progressoSessoes]);
+
   // Grade semanal do card Minha Semana (personalizável pelo aluno)
   const semanaVisual = useMemo(() => {
     if (!fichaTreino) return null;
@@ -148,12 +166,15 @@ export default function Inicio() {
         .sort((a, b) => a.ordem - b.ordem)
         .map(p => lista.find(t => t.id === p.treino_id))
         .filter((t): t is NonNullable<typeof t> => !!t);
+      const data = dataDeDiaSemana(d);
+      const concluido = treinosDia.length > 0 && data !== '' && treinosDia.every(t => concluidoPorData.has(`${t.id}|${data}`));
       return {
         treinos: treinosDia,
         descanso: treinosDia.length === 0 && itens.some(p => p.is_descanso),
+        concluido,
       };
     });
-  }, [planoSemana, fichaTreino]);
+  }, [planoSemana, fichaTreino, concluidoPorData]);
 
   if (!profile) {
     return (
@@ -170,6 +191,20 @@ export default function Inicio() {
   const kcalPct = kcalGoal > 0 ? Math.min(100, (consumo.calories / kcalGoal) * 100) : 0;
 
   const carregando = loading || sequencia.loading;
+
+  const dataSP = (() => {
+    try {
+      return new Intl.DateTimeFormat('en-CA', {
+        timeZone: 'America/Sao_Paulo',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+      }).format(new Date());
+    } catch {
+      return new Date().toISOString().slice(0, 10);
+    }
+  })();
+  const planoExpirado = !!profile?.plano_vencimento && profile.plano_vencimento.slice(0, 10) < dataSP;
 
   return (
     <div className="min-h-screen p-4 md:p-7 pb-24 md:pb-8">
@@ -191,9 +226,12 @@ export default function Inicio() {
                 <span className="inline-block w-[3px] h-3.5 bg-accent-light" aria-hidden />
                 Bem-vindo
               </p>
-              <h1 className="mt-3 text-3xl sm:text-4xl lg:text-[42px] leading-[1.1] font-display tracking-wide break-words">
-                <span className="block text-bone">{getGreeting()},</span>
-                <span className="block text-accent-light">{primeiroNome}!</span>
+              <h1 className="mt-3 text-3xl sm:text-4xl lg:text-[42px] leading-[1.1] font-display tracking-wide break-words flex items-center gap-4">
+                <StudentAvatar size="lg" />
+                <div>
+                  <span className="block text-bone">{getGreeting()},</span>
+                  <span className="block text-accent-light">{primeiroNome}!</span>
+                </div>
               </h1>
               <p className="mt-2 text-xs md:text-sm text-muted-steel">
                 Seu foco hoje constrói seus resultados de amanhã.
@@ -242,6 +280,17 @@ export default function Inicio() {
           </div>
         )}
 
+        {planoExpirado && (
+          <div className="flex flex-wrap items-center justify-between gap-2 p-3 clip-bevel-sm bg-red-500/10 text-red-300 border border-red-500/25">
+            <div className="flex items-center gap-2 text-xs">
+              <AlertCircle size={15} className="text-red-400 shrink-0" />
+              <span>
+                Seu plano mensal venceu. Fale com seu treinador para renovar e continuar acompanhando seus treinos.
+              </span>
+            </div>
+          </div>
+        )}
+
         {carregando ? (
           <div className="bg-panel border border-line p-8 text-center">
             <Loader2 size={22} className="mx-auto text-muted-steel animate-spin" />
@@ -272,9 +321,9 @@ export default function Inicio() {
                     <button
                       type="button"
                       onClick={() => setModalPlanejamento(true)}
-                      className="btn-forge text-xs px-3 py-1.5 h-auto gap-1.5 shrink-0"
+                      className="btn-plate-sm text-xs px-3 py-1.5 gap-1.5 shrink-0"
                     >
-                      <Pencil size={12} />
+                      <CalendarioCanetaIcon size={13} />
                       <span>{temAlgumAgendamento ? 'Editar Calendário' : 'Definir Dias de Treino'}</span>
                     </button>
                   </div>
@@ -313,20 +362,26 @@ export default function Inicio() {
                   <div className="grid grid-cols-4 sm:grid-cols-7 gap-2">
                     {semanaVisual.map((dia, i) => {
                       const temTreino = dia.treinos.length > 0;
-                      const cellTone = hoje === i
-                        ? 'border-accent/60 bg-accent/[0.05]'
-                        : dia.descanso
-                          ? 'border-sky-500/20 bg-sky-500/[0.03]'
-                          : 'border-line bg-panel-2/40';
+                      const cellTone = dia.concluido
+                        ? 'border-emerald-500/50 bg-emerald-500/[0.05]'
+                        : hoje === i
+                          ? 'border-accent/60 bg-accent/[0.05]'
+                          : dia.descanso
+                            ? 'border-sky-500/20 bg-sky-500/[0.03]'
+                            : 'border-line bg-panel-2/40';
                       const cellCls = `clip-bevel-sm border p-2 min-h-[84px] flex flex-col transition-colors ${cellTone}`;
 
                       const conteudo = (
                         <>
                           <div className="flex items-center justify-between gap-1 mb-1.5">
-                            <span className={`text-[10px] font-extrabold uppercase tracking-wider ${hoje === i ? 'text-accent-light' : 'text-muted-steel'}`}>
+                            <span className={`text-[10px] font-extrabold uppercase tracking-wider ${dia.concluido ? 'text-emerald-300' : hoje === i ? 'text-accent-light' : 'text-muted-steel'}`}>
                               {DAYS_SHORT[i]}
                             </span>
-                            {hoje === i ? (
+                            {dia.concluido ? (
+                              <span className="inline-flex items-center gap-0.5 text-[8px] font-extrabold uppercase tracking-[0.12em] text-emerald-300 bg-emerald-500/15 border border-emerald-500/40 px-1.5 py-0.5 clip-bevel-sm">
+                                <Check size={9} /> feito
+                              </span>
+                            ) : hoje === i ? (
                               <span className="text-[8px] font-extrabold uppercase tracking-[0.12em] text-[#170B04] bg-gradient-to-b from-accent-light to-accent px-1.5 py-0.5 clip-bevel-sm">
                                 hoje
                               </span>
@@ -337,7 +392,7 @@ export default function Inicio() {
                           {temTreino ? (
                             <div className="space-y-1 min-w-0">
                               {dia.treinos.map((t, j) => (
-                                <span key={t.id} className={`block text-[10.5px] font-bold truncate leading-tight ${j === 0 ? 'text-bone' : 'text-zinc-400'}`}>
+                                <span key={t.id} className={`block text-[10.5px] font-bold truncate leading-tight ${dia.concluido ? 'text-emerald-300/90' : j === 0 ? 'text-bone' : 'text-zinc-400'}`}>
                                   {t.letra_ou_nome}
                                 </span>
                               ))}
@@ -380,7 +435,7 @@ export default function Inicio() {
             <div className="bg-panel border border-line clip-bevel-sm p-4 md:p-6 flex flex-col">
               <div className="flex items-center justify-between mb-4 md:mb-5">
                 <p className="font-display text-[11.5px] tracking-[0.12em] uppercase text-bone flex items-center gap-2">
-                  <Dumbbell size={14} className="text-accent-light" /> Treino
+                  <BarraOlimpicaIcon size={15} className="text-accent-light" /> Treino
                 </p>
                 {!(planoHoje.tipo === 'treino' && treinosDeHoje.length > 0) && (
                   <Link to="/treinos" className="btn-ghost">
@@ -477,7 +532,7 @@ export default function Inicio() {
               <div className="bg-panel border border-line clip-bevel-sm p-4 md:p-6 flex flex-col">
                 <div className="flex items-center justify-between mb-4 md:mb-5">
                   <p className="font-display text-[11.5px] tracking-[0.12em] uppercase text-bone flex items-center gap-2">
-                    <Apple size={14} className="text-accent-light" /> Dieta · Hoje
+                    <TalherFolhaIcon size={15} className="text-accent-light" /> Dieta · Hoje
                   </p>
                   <Link to="/dieta" className="btn-ghost">
                     Ver Dieta <ArrowRight size={12} />
@@ -522,7 +577,7 @@ export default function Inicio() {
               <div className="relative overflow-hidden bg-panel border border-line clip-bevel-sm p-4 md:p-6 flex flex-col opacity-70 select-none">
                 <div className="flex items-center justify-between mb-4 md:mb-5">
                   <p className="font-display text-[11.5px] tracking-[0.12em] uppercase text-muted-steel flex items-center gap-2">
-                    <Apple size={14} /> Dieta · Hoje
+                    <TalherFolhaIcon size={14} /> Dieta · Hoje
                   </p>
                   <span className="flex items-center gap-1 text-[10px] uppercase tracking-[0.06em] font-bold text-muted-steel border border-line clip-bevel-sm px-2 py-0.5">
                     <Lock size={9} /> VIP
@@ -612,7 +667,7 @@ export default function Inicio() {
 
                 <Link
                   to="/progresso"
-                  className="flex-none inline-flex items-center justify-center gap-2 h-[44px] w-full sm:w-auto px-5 font-display uppercase text-[13px] tracking-[0.05em] text-[#170B04] bg-gradient-to-b from-accent-light to-accent clip-bevel shadow-[inset_0_1px_0_rgba(255,255,255,0.5),0_6px_16px_-8px_rgba(255,90,31,0.55)] hover:brightness-110 active:translate-y-[2px] transition"
+                  className="btn-plate-sm !h-[44px] flex-none w-full sm:w-auto px-5 gap-2 text-[13px]"
                 >
                   Ver Progressão <ArrowRight size={14} strokeWidth={3} />
                 </Link>

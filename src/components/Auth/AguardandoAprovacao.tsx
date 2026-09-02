@@ -1,7 +1,8 @@
-import { Clock, LogOut, Dumbbell, ShieldAlert, Ban } from 'lucide-react';
+import { Clock, LogOut, ShieldAlert, Ban } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
+import { LogoWordmark } from '../icons/AppIcons';
 
 export default function AguardandoAprovacao() {
   const navigate = useNavigate();
@@ -18,10 +19,9 @@ export default function AguardandoAprovacao() {
     <div className="min-h-screen bg-zinc-950 flex items-center justify-center p-4">
       <div className="w-full max-w-sm">
         <div className="flex flex-col items-center mb-8">
-          <div className="w-14 h-14 rounded-2xl bg-accent/10 border border-accent/20 flex items-center justify-center mb-4 shadow-glow-sm">
-            <Dumbbell size={26} className="text-accent" strokeWidth={1.8} />
+          <div className="mb-3">
+            <LogoWordmark size="md" />
           </div>
-          <h1 className="text-lg font-bold text-zinc-100 tracking-tight">FitnessApp</h1>
         </div>
 
         <div className="bg-zinc-900/60 border border-zinc-800/50 rounded-2xl p-5 md:p-6 text-center">
@@ -38,12 +38,12 @@ export default function AguardandoAprovacao() {
           </div>
 
           <h2 className="text-base font-bold text-zinc-100 mb-2">
-            {isRecusado ? 'Acesso Recusado' : 'Aguardando Confirmacao'}
+            {isRecusado ? 'Plano Pausado' : 'Aguardando Confirmacao'}
           </h2>
 
           <p className="text-[12px] text-zinc-400 leading-relaxed mb-4">
             {isRecusado
-              ? 'Seu acesso foi recusado pelo Personal Trainer.'
+              ? 'Seu plano foi pausado pelo Personal Trainer. Renove para reativar o acesso.'
               : 'Seu acesso ainda nao foi autorizado.'
             }
           </p>
@@ -52,13 +52,10 @@ export default function AguardandoAprovacao() {
             {isRecusado ? (
               <>
                 <p className="text-[11px] text-zinc-500 leading-relaxed">
-                  Aguardando confirmacao do Personal Trainer.
+                  Entre em contato com seu treinador para renovar o plano e reativar o acesso.
                 </p>
                 <p className="text-[11px] text-zinc-600 leading-relaxed">
-                  Voce nao pode acessar treinos, dietas ou outras funcionalidades.
-                </p>
-                <p className="text-[11px] text-zinc-600 leading-relaxed">
-                  Apos 15 minutos, voce podera tentar fazer login novamente.
+                  Voce nao pode acessar treinos, dietas ou outras funcionalidades enquanto o plano estiver pausado.
                 </p>
               </>
             ) : (

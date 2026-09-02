@@ -63,7 +63,7 @@ export function useGestorAuth(): GestorAuthState {
           setState({
             isGestor: gestorConfirmado,
             loading: false,
-            profile,
+            profile: profile as Usuario,
             error: null,
           });
         }

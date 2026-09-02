@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react';
 import { NavLink, Outlet, useNavigate, useOutletContext, useParams } from 'react-router-dom';
-import { ArrowLeft, LayoutDashboard, Dumbbell, Apple, Loader2, AlertCircle, Settings2, MessageSquare, ClipboardCheck, BarChart3, CalendarRange } from 'lucide-react';
+import { ArrowLeft, LayoutDashboard, Loader2, AlertCircle, Settings2, MessageSquare, ClipboardCheck, BarChart3, CalendarRange } from 'lucide-react';
+import StudentAvatar from '../ui/StudentAvatar';
 import { usuarios } from '../../services/api';
 import ModalEditarAluno from './ModalEditarAluno';
+import { BarraOlimpicaIcon, TalherFolhaIcon } from '../icons/AppIcons';
 import type { Usuario } from '../../types';
 
 interface AlunoLayoutContext {
@@ -11,10 +13,10 @@ interface AlunoLayoutContext {
 
 const TABS = [
   { to: '', label: 'Visão Geral', icon: LayoutDashboard, end: true },
-  { to: 'treino', label: 'Treino', icon: Dumbbell, end: false },
+  { to: 'treino', label: 'Treino', icon: BarraOlimpicaIcon, end: false },
   { to: 'planejamento', label: 'Planejamento', icon: CalendarRange, end: false },
   { to: 'progresso', label: 'Progressão', icon: BarChart3, end: false },
-  { to: 'dieta', label: 'Dieta', icon: Apple, end: false },
+  { to: 'dieta', label: 'Dieta', icon: TalherFolhaIcon, end: false },
   { to: 'acompanhamento', label: 'Acompanhamento', icon: MessageSquare, end: false },
   { to: 'avaliacao', label: 'Avaliação Física', icon: ClipboardCheck, end: false },
 ];
@@ -80,9 +82,7 @@ export default function AlunoLayout() {
               </div>
             ) : (
               <>
-                <div className="w-9 h-9 clip-bevel-sm bg-gradient-to-br from-accent-light to-plate flex items-center justify-center shrink-0 shadow-[inset_0_1px_0_rgba(255,255,255,0.4)]">
-                  <span className="text-[11px] font-bold text-[#170B04]">{initials}</span>
-                </div>
+                <StudentAvatar size="sm" />
                 <div className="min-w-0 flex-1">
                   <h1 className="text-sm font-bold text-bone truncate leading-tight">{aluno.nome}</h1>
                   <p className="text-[11px] text-muted-steel truncate leading-tight">{aluno.email}</p>

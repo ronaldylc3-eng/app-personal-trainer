@@ -79,9 +79,13 @@ CREATE TABLE public.logs_execucao (
 );
 
 -- Idempotencia do "Finalizar Treino de Hoje": refinalizar no mesmo dia
--- substitui os valores das series ja registradas (upsert)
+-- substitui os valores das series ja registradas (upsert). O vinculo
+-- log_treino_id entra na chave para que sessões distintas do mesmo dia
+-- (ex.: aluno finaliza 2x o mesmo treino) não sobrescrevam as series
+-- uma da outra, mantendo o historico consistente.
+DROP INDEX IF EXISTS logs_upsert_diario;
 CREATE UNIQUE INDEX logs_upsert_diario
-  ON public.logs_execucao (exercicio_id, num_serie, data_treino);
+  ON public.logs_execucao (exercicio_id, num_serie, data_treino, log_treino_id);
 
 CREATE INDEX idx_logs_exercicio_data
   ON public.logs_execucao (exercicio_id, data_treino DESC);

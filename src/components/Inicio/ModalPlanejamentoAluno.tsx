@@ -419,6 +419,14 @@ export default function ModalPlanejamentoAluno({
               </DragOverlay>
             </DndContext>
           )}
+
+          {/* Nota treino flexível */}
+          <div className="p-3 bg-panel-2/50 border border-line clip-bevel-sm flex items-start gap-2.5 text-[11px] text-zinc-400">
+            <Info size={14} className="text-accent-light shrink-0 mt-0.5" />
+            <span>
+              Dias livres ficam sem compromisso — em rotinas flexíveis você treina neles quando preferir ou aproveita para descansar.
+            </span>
+          </div>
         </div>
 
         {/* Footer */}

@@ -4,6 +4,7 @@ import {
   X, Dumbbell, Apple, ClipboardCheck, MessageSquare,
   Loader2, AlertCircle, FolderOpen,
 } from 'lucide-react';
+import StudentAvatar from '../ui/StudentAvatar';
 import { fichas } from '../../services/api';
 import type { Usuario, FichaCompleta, EventoClinico } from '../../types';
 
@@ -61,9 +62,7 @@ export default function ResumoCompletoModal({ aluno, onClose }: { aluno: Usuario
         {/* Header */}
         <div className="sticky top-0 bg-panel/95 backdrop-blur border-b border-line px-5 py-4 flex items-start justify-between gap-3 z-10">
           <div className="flex items-center gap-3 min-w-0">
-            <div className="w-10 h-10 shrink-0 clip-bevel-sm bg-gradient-to-br from-accent-light to-plate shadow-[inset_0_1px_0_rgba(255,255,255,0.4)] flex items-center justify-center text-sm font-bold text-[#170B04]">
-              {aluno.nome.trim().charAt(0).toUpperCase() || '?'}
-            </div>
+            <StudentAvatar size="md" className="shrink-0" />
             <div className="min-w-0">
               <h3 className="text-sm font-bold text-bone truncate">{aluno.nome}</h3>
               <p className="text-[11px] text-muted-steel">Resumo completo do prontuário</p>

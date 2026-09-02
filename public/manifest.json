@@ -1,6 +1,6 @@
 {
-  "name": "FitnessApp - Treinos & Dieta",
-  "short_name": "FitnessApp",
+  "name": "LOS GYM - Treinos & Dieta",
+  "short_name": "LOS GYM",
   "description": "App de treinos, dieta, acompanhamento e avaliação física.",
   "start_url": "/",
   "display": "standalone",

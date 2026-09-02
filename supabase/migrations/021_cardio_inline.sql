@@ -53,9 +53,11 @@ CREATE INDEX IF NOT EXISTS idx_logs_cardio_exercicio_data
 CREATE INDEX IF NOT EXISTS idx_logs_cardio_log_treino ON public.logs_cardio (log_treino_id);
 
 -- Idempotencia do "Finalizar Treino": refinalizar no mesmo dia
--- substitui os valores ja registrados.
+-- substitui os valores ja registrados. log_treino_id entra na chave
+-- para manter a consistencia entre sessoes distintas do mesmo dia.
+DROP INDEX IF EXISTS logs_cardio_upsert_diario;
 CREATE UNIQUE INDEX IF NOT EXISTS logs_cardio_upsert_diario
-  ON public.logs_cardio (exercicio_id, data_treino);
+  ON public.logs_cardio (exercicio_id, data_treino, log_treino_id);
 
 -- -------------------------------------------------------------
 -- 3. ROW LEVEL SECURITY (espelha logs_execucao / logs_treino)

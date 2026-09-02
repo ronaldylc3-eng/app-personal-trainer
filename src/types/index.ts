@@ -37,6 +37,9 @@ export interface Usuario {
   caloria_meta: number;
   created_at: string;
   updated_at: string;
+  gestor_id?: string | null;
+  plano_inicio?: string | null;
+  plano_vencimento?: string | null;
 }
 
 // ========================
@@ -143,6 +146,7 @@ export interface TreinoFicha {
   ficha_id: string;
   letra_ou_nome: string;
   observacoes?: string | null;
+  periodizacao_id: string;
   created_at: string;
 }
 
@@ -167,9 +171,13 @@ export interface ExercicioTreino {
   meta_distancia_km?: number | null;
 }
 
-// Execução de cardio registrada pelo aluno (upsert diário)
+// Execução de cardio registrada pelo aluno (upsert diário).
+// Em Cardio Isolado Livre (fora da ficha), exercicio_id fica nulo e o
+// registro é identificado pelo user_id + nome_cardio.
 export interface LogCardioInput {
-  exercicio_id: string;
+  exercicio_id: string | null;
+  user_id?: string | null;
+  nome_cardio?: string | null;
   duracao_min: number;
   distancia_km: number | null;
   data_treino: string;
@@ -180,6 +188,12 @@ export interface LogCardioInput {
 // Periodização Semanal
 // ========================
 
+// Configuração global da semana do aluno (meta semanal + alocações)
+export interface PlanejamentoSemanaConfig {
+  // Meta semanal global de cardio em minutos (>=0). Nulo/0 = não definida.
+  meta_cardio_semanal?: number | null;
+}
+
 // Item enviado ao salvar a semana (RPC salvar_planejamento)
 export interface PlanejamentoItem {
   dia_semana: number; // 0=Domingo .. 6=Sábado
@@ -188,9 +202,11 @@ export interface PlanejamentoItem {
   ordem: number;
 }
 
-// Linha lida do banco (com nome do treino resolvido)
+// Linha lida do banco (com nome do treino resolvido).
+// meta_cardio_semanal é repetida nas linhas; usa-se o valor da primeira.
 export interface PlanejamentoAlocacao extends PlanejamentoItem {
   treino_nome?: string | null;
+  meta_cardio_semanal?: number | null;
 }
 
 export interface LogExecucao {
@@ -213,14 +229,14 @@ export interface LogExecucao {
 export interface LogTreino {
   id: string;
   user_id: string;
-  treino_id: string;
+  treino_id: string | null; // null = Cardio Isolado Livre (fora da ficha)
   data_execucao: string;
   duracao_segundos: number;
 }
 
 export interface SessaoHistorico {
   id: string;
-  treino_id: string;
+  treino_id: string | null;
   nome_treino: string;
   data_execucao: string;
   duracao_segundos: number;
@@ -252,7 +268,8 @@ export interface ExercicioSeriesSessao {
 }
 
 export interface CardioSessaoItem {
-  exercicio_id: string;
+  exercicio_id: string | null;
+  nome_cardio?: string | null;
   duracao_min: number;
   distancia_km?: number | null;
 }
@@ -269,6 +286,22 @@ export interface SessaoComProgresso extends SessaoHistorico {
 
 export interface TreinoComExercicios extends TreinoFicha {
   exercicios: ExercicioTreino[];
+}
+
+// ========================
+// Periodizações (Blocos de Treinamento)
+// Grupo de treinos dentro de uma mesma ficha (ex.: "High Volume", "Low Volume").
+// ========================
+
+export interface Periodizacao {
+  id: string;
+  ficha_id: string;
+  nome: string;
+  created_at: string;
+}
+
+export interface PeriodizacaoComTreinos extends Periodizacao {
+  treinos: TreinoComExercicios[];
 }
 
 // ========================
@@ -291,6 +324,7 @@ export interface RefeicaoDieta extends RefeicaoDietaInput {
 export interface FichaCompleta extends FichaTreino {
   treinos: TreinoComExercicios[];
   refeicoes?: RefeicaoDieta[];
+  periodizacoes?: PeriodizacaoComTreinos[];
 }
 
 // ========================

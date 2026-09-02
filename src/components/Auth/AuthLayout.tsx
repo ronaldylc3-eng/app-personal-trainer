@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { Dumbbell } from 'lucide-react';
+import { LogoWordmark } from '../icons/AppIcons';
 
 interface SideStat {
   value: string;
@@ -17,25 +17,10 @@ interface AuthLayoutProps {
   children: ReactNode;
 }
 
-export function BrandLogo({ size, cut }: { size: number; cut: string }) {
-  return (
-    <div
-      className={`${cut} bg-gradient-to-br from-accent-light to-plate shadow-[inset_0_1px_0_rgba(255,255,255,0.4)] flex items-center justify-center shrink-0`}
-      style={{ width: size, height: size }}
-    >
-      <Dumbbell size={Math.round(size * 0.48)} color="#170B04" strokeWidth={2.75} />
-    </div>
-  );
-}
-
 function DesktopBrand() {
   return (
-    <div className="hidden min-[900px]:flex items-center gap-2.5 mb-11">
-      <BrandLogo size={38} cut="clip-bevel" />
-      <div className="leading-tight">
-        <b className="font-display text-[15px] tracking-[0.03em] block">FITNESSAPP</b>
-        <span className="text-[11px] text-muted-steel">Treinos &amp; Dieta</span>
-      </div>
+    <div className="hidden min-[900px]:flex items-start justify-center text-center mb-11 mt-2">
+      <LogoWordmark size="lg" />
     </div>
   );
 }
@@ -60,9 +45,8 @@ export default function AuthLayout({
         <div className="absolute inset-0 bg-gradient-to-b from-ink/25 via-ink/55 to-ink/[0.97] min-[900px]:from-ink/35 min-[900px]:to-ink/[0.96]" />
         <div className="stripe-overlay" />
         <div className="relative z-[2] h-full flex flex-col justify-end px-[22px] pt-4 pb-5 min-[900px]:p-14">
-          <div className="flex items-center gap-2 mb-auto min-[900px]:hidden">
-            <BrandLogo size={26} cut="clip-bevel-sm" />
-            <span className="font-display text-[13px] tracking-[0.03em]">FITNESSAPP</span>
+          <div className="flex items-center justify-center mb-auto min-[900px]:hidden">
+            <LogoWordmark size="sm" />
           </div>
           <p className="hidden min-[900px]:inline-flex items-center gap-2 font-display text-[11px] tracking-[0.18em] uppercase text-accent-light mb-2 w-fit before:content-[''] before:w-5 before:h-0.5 before:bg-accent">
             {eyebrow}

@@ -1,1 +1,5 @@
 project_id = "fitness-app"
+
+[functions.analyze-food]
+verify_jwt = true
+include_cors_headers = true

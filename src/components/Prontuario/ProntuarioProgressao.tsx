@@ -16,6 +16,7 @@ export default function ProntuarioProgressao() {
 
   const [loading, setLoading] = useState(true);
   const [erro, setErro] = useState('');
+  const [erroVolume, setErroVolume] = useState('');
   const [sessoes, setSessoes] = useState<SessaoComProgresso[]>([]);
   const [volumeTotal, setVolumeTotal] = useState(0);
 
@@ -24,6 +25,7 @@ export default function ProntuarioProgressao() {
     let cancel = false;
     setLoading(true);
     setErro('');
+    setErroVolume('');
     logsExecucao.getProgresso(alunoId)
       .then(d => {
         if (!cancel) setSessoes(d);
@@ -39,7 +41,7 @@ export default function ProntuarioProgressao() {
         if (!cancel) setVolumeTotal(v);
       })
       .catch(() => {
-        // Falha silenciosa: card exibe 0 kg
+        if (!cancel) setErroVolume('Não foi possível calcular o volume dos últimos 30 dias.');
       });
     return () => { cancel = true; };
   }, [alunoId]);
@@ -90,6 +92,12 @@ export default function ProntuarioProgressao() {
                 <p className="font-display text-[32px] leading-none text-bone stat-number">
                   {volumeTotal.toLocaleString('pt-BR', { maximumFractionDigits: 1 })} kg
                 </p>
+                {erroVolume && (
+                  <p className="flex items-center gap-1.5 text-[11px] text-amber-400 mt-2.5">
+                    <AlertCircle size={12} className="shrink-0" />
+                    <span>{erroVolume}</span>
+                  </p>
+                )}
                 <p className="text-xs text-muted-steel mt-1.5">nos últimos 30 dias</p>
               </div>
             </div>

@@ -48,9 +48,9 @@ export default function NovaSenha() {
       const { error: updateError } = await auth.updatePassword(password);
       if (updateError) throw updateError;
 
-      setSuccess('Senha redefinida com sucesso! Redirecionando para o login...');
+      setSuccess('Senha cadastrada com sucesso!');
       await auth.signOut();
-      setTimeout(() => navigate('/'), 2000);
+      setTimeout(() => navigate('/login', { replace: true }), 2000);
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Erro ao redefinir senha';
       setError(message);

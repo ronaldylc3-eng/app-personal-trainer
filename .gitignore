@@ -10,3 +10,5 @@ dist/
 build/
 android/.gradle/
 android/app/build/
+.idea/
+supabase/.temp/

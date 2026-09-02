@@ -36,6 +36,44 @@ export const haptics = {
     }
   },
 
+  // Impacto leve (pequenas ações, mudança de estilo/seleção de fundo)
+  impact: async () => {
+    if (Capacitor.isNativePlatform()) {
+      try {
+        await Haptics.impact({ style: ImpactStyle.Medium });
+        return;
+      } catch {
+        // Fallback
+      }
+    }
+    if (typeof navigator !== 'undefined' && navigator.vibrate) {
+      try {
+        navigator.vibrate(15);
+      } catch {
+        // Ignora
+      }
+    }
+  },
+
+  // Seleção de item (backgrounds, alternância de métrica)
+  selection: async () => {
+    if (Capacitor.isNativePlatform()) {
+      try {
+        await Haptics.impact({ style: ImpactStyle.Light });
+        return;
+      } catch {
+        // Fallback
+      }
+    }
+    if (typeof navigator !== 'undefined' && navigator.vibrate) {
+      try {
+        navigator.vibrate(8);
+      } catch {
+        // Ignora
+      }
+    }
+  },
+
   // Seleção ou marcação de série concluída
   success: async () => {
     if (Capacitor.isNativePlatform()) {

@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<title>FitnessApp — Botão Editar Calendário</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Anton&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#0A0A0B;--surface:#151517;--surface-2:#1C1C20;--surface-3:#212126;
+    --line:#28282D;--text:#F3F2EF;--muted:#8E8E96;
+    --accent:#FF5A1F;--accent-2:#FF7A3D;--accent-dark:#8A2A0A;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--bg);font-family:'Inter',sans-serif;color:var(--text);padding:48px 32px 80px;}
+  .wrap{max-width:900px;margin:0 auto;}
+  h1{font-family:'Anton',sans-serif;font-weight:400;text-transform:uppercase;font-size:24px;margin:0 0 6px;}
+  .sub{color:var(--muted);font-size:14px;margin:0 0 40px;max-width:600px;line-height:1.55;}
+
+  .section-label{
+    font-family:'Anton',sans-serif;font-size:12px;letter-spacing:.12em;color:var(--accent-2);
+    display:flex;align-items:center;gap:10px;margin:0 0 18px;text-transform:uppercase;
+  }
+  .section-label::after{content:"";flex:1;height:1px;background:var(--line);}
+
+  .row{display:flex;gap:22px;flex-wrap:wrap;align-items:flex-start;margin-bottom:52px;}
+  .opt{display:flex;flex-direction:column;gap:12px;align-items:flex-start;max-width:260px;}
+  .opt-tag{font-size:10px;font-weight:800;letter-spacing:.08em;color:var(--muted);text-transform:uppercase;}
+  .opt-tag.reco{color:var(--accent-2);}
+  .compare-note{font-size:12.5px;color:var(--muted);line-height:1.5;}
+
+  .btn{
+    font-family:'Anton',sans-serif;font-weight:400;text-transform:uppercase;
+    border:none;cursor:pointer;display:inline-flex;align-items:center;gap:10px;
+    transition:transform .12s ease, filter .12s ease;
+  }
+  .btn:active{transform:translateY(2px) scale(.99);}
+  .btn svg{flex:none;}
+
+  /* ===== ATUAL — referência (achatado, sem profundidade) ===== */
+  .btn-current{
+    height:44px;padding:0 20px;color:#1a0900;
+    background:#FF6A2A;
+    border-radius:0;
+    clip-path:polygon(12px 0,100% 0,100% calc(100% - 12px),calc(100% - 12px) 100%,0 100%,0 12px);
+    font-size:13px;letter-spacing:.04em;
+    font-weight:700;
+    -webkit-text-stroke:.4px #1a0900;
+  }
+  .btn-current svg{width:16px;height:16px;stroke:#1a0900;}
+
+  /* ===== NOVO A — chapa refinada (mesma família dos outros botões do app) ===== */
+  .btn-refined{
+    height:46px;padding:0 22px;color:#150800;font-size:13.5px;letter-spacing:.05em;
+    background:linear-gradient(180deg,var(--accent-2) 0%, var(--accent) 55%, var(--accent-dark) 100%);
+    clip-path:polygon(12px 0,100% 0,100% calc(100% - 12px),calc(100% - 12px) 100%,0 100%,0 12px);
+    box-shadow:inset 0 2px 0 rgba(255,255,255,.55), inset 0 -8px 12px rgba(0,0,0,.35), 0 8px 18px -8px rgba(255,90,31,.5);
+  }
+  .btn-refined:hover{filter:brightness(1.08);}
+  .btn-refined svg{width:16px;height:16px;stroke:#150800;}
+
+  /* ===== NOVO B — vidro/contorno (mesmo tratamento dos ícones) ===== */
+  .btn-glass{
+    height:46px;padding:0 22px;color:var(--accent-2);font-size:13.5px;letter-spacing:.05em;
+    background:var(--surface-3);
+    border:1px solid rgba(255,90,31,.4);
+    clip-path:polygon(12px 0,100% 0,100% calc(100% - 12px),calc(100% - 12px) 100%,0 100%,0 12px);
+    box-shadow:0 0 24px -10px rgba(255,90,31,.35);
+    position:relative;overflow:hidden;
+  }
+  .btn-glass::before{
+    content:"";position:absolute;inset:0;
+    background:radial-gradient(circle at 20% 20%, rgba(255,90,31,.16), transparent 65%);
+    pointer-events:none;
+  }
+  .btn-glass:hover{border-color:var(--accent);background:#26262b;}
+  .btn-glass svg{width:16px;height:16px;stroke:var(--accent-2);position:relative;z-index:1;}
+  .btn-glass span{position:relative;z-index:1;}
+
+  /* ===== NOVO C — aço com aresta (mais sóbrio, secundário) ===== */
+  .btn-plate{
+    height:46px;padding:0 22px;color:var(--text);font-size:13.5px;letter-spacing:.05em;
+    background:linear-gradient(155deg,#232327,#151517);
+    border:1px solid var(--line);
+    border-left:3px solid var(--accent);
+    clip-path:polygon(10px 0,100% 0,100% calc(100% - 10px),calc(100% - 10px) 100%,0 100%,0 10px);
+  }
+  .btn-plate:hover{border-color:#3A3A40;color:var(--accent-2);}
+  .btn-plate svg{width:16px;height:16px;stroke:var(--accent-2);}
+
+  /* ===== Aplicação em contexto ===== */
+  .context-card{
+    background:var(--surface);border:1px solid var(--line);padding:22px 24px;
+    display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap;max-width:640px;
+  }
+  .ctx-text h3{font-size:16px;margin:0 0 4px;}
+  .ctx-text p{font-size:12.5px;color:var(--muted);margin:0;}
+
+  .note-box{
+    background:var(--surface);border:1px solid var(--line);border-left:3px solid var(--accent);
+    padding:18px 20px;font-size:13.5px;color:var(--muted);line-height:1.6;margin-top:16px;max-width:640px;
+  }
+  .note-box b{color:var(--text);}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Botão "Editar Calendário" — v2</h1>
+  <p class="sub">Mesmo raciocínio dos ícones: o problema não era só a cor, era a construção — laranja chapado, texto com contorno preto grosso e ícone de lápis genérico deixam o botão com cara de banner de propaganda. Refinei a "chapa" (gradiente + bisel de luz que os outros botões do app já têm) e troquei o lápis solto por um ícone de calendário com caneta, que fala mais claramente "editar calendário".</p>
+
+  <p class="section-label">COMPARATIVO</p>
+  <div class="row">
+    <div class="opt">
+      <span class="opt-tag">ATUAL (referência)</span>
+      <button class="btn btn-current">
+        <svg viewBox="0 0 24 24" fill="none" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4z"/></svg>
+        Editar Calendário
+      </button>
+      <p class="compare-note">Laranja chapado sem gradiente, texto com contorno preto grosso (fica "gritando"), ícone de lápis solto sem contexto.</p>
+    </div>
+
+    <div class="opt">
+      <span class="opt-tag reco">NOVO A · CHAPA REFINADA</span>
+      <button class="btn btn-refined">
+        <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="14" height="14" rx="1"/><path d="M3 9h14M7 3v3M13 3v3"/><path d="M15.5 15.5l4-4 2 2-4 4h-2v-2z"/></svg>
+        <span>Editar Calendário</span>
+      </button>
+      <p class="compare-note">Mesmo gradiente com bisel de luz dos outros CTAs do app — parece parte do sistema, não um banner à parte. Ícone: calendário + caneta.</p>
+    </div>
+
+    <div class="opt">
+      <span class="opt-tag">NOVO B · VIDRO/CONTORNO</span>
+      <button class="btn btn-glass">
+        <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="14" height="14" rx="1"/><path d="M3 9h14M7 3v3M13 3v3"/><path d="M15.5 15.5l4-4 2 2-4 4h-2v-2z"/></svg>
+        <span>Editar Calendário</span>
+      </button>
+      <p class="compare-note">Mesmo tratamento "vidro" que sugeri pros ícones — bom se esse botão for uma ação secundária, não a principal da tela.</p>
+    </div>
+
+    <div class="opt">
+      <span class="opt-tag">NOVO C · AÇO COM ARESTA</span>
+      <button class="btn btn-plate">
+        <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="14" height="14" rx="1"/><path d="M3 9h14M7 3v3M13 3v3"/><path d="M15.5 15.5l4-4 2 2-4 4h-2v-2z"/></svg>
+        <span>Editar Calendário</span>
+      </button>
+      <p class="compare-note">O mais discreto — funciona bem em barras de ferramenta com vários botões lado a lado, sem competir entre si.</p>
+    </div>
+  </div>
+
+  <p class="section-label">EM CONTEXTO</p>
+  <div class="context-card">
+    <div class="ctx-text">
+      <h3>Calendário de Treinos</h3>
+      <p>Ajuste os dias e horários da ficha ativa.</p>
+    </div>
+    <button class="btn btn-refined">
+      <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="14" height="14" rx="1"/><path d="M3 9h14M7 3v3M13 3v3"/><path d="M15.5 15.5l4-4 2 2-4 4h-2v-2z"/></svg>
+      <span>Editar Calendário</span>
+    </button>
+  </div>
+
+  <div class="note-box">
+    <b>Recomendação:</b> se esse botão for a ação principal da tela onde ele aparece, use o <b>Novo A (chapa refinada)</b> — é visualmente idêntico à família de botões primários que já validamos em login, treino e dieta, então ele "conversa" com o resto do app em vez de parecer um elemento solto. Se ele for uma ação secundária (ex: dentro de uma barra de ferramentas ao lado de outros botões), o <b>Novo C (aço com aresta)</b> evita que várias chapas laranjas brigem por atenção na mesma tela.
+  </div>
+</div>
+</body>
+</html>

@@ -2,38 +2,26 @@ import { useState, useMemo, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Users,
-  Dumbbell,
-  ClipboardCheck,
   TrendingUp,
   Flame,
   AlertTriangle,
-  Clock,
   ArrowUpRight,
-  MessageCircle,
   Crown,
   Trophy,
-  ChevronRight,
   CheckCircle2,
-  Calendar,
   Sparkles,
-  Search,
-  Filter,
-  Plus,
-  Shield,
   Activity,
-  UserCheck,
   FileText,
   Weight,
-  ExternalLink,
-  Target,
-  Zap,
-  Phone,
   UserPlus,
-  Loader2
+  Loader2,
+  RefreshCw,
 } from 'lucide-react';
+import StudentAvatar from '../ui/StudentAvatar';
 import { useAuth } from '../../hooks/useAuth';
 import { useAlunos } from '../../hooks/useAlunos';
 import { supabase } from '../../lib/supabase';
+import { usuarios } from '../../services/api';
 import type { Usuario } from '../../types';
 
 export interface AlunoRiscoItem {
@@ -43,6 +31,21 @@ export interface AlunoRiscoItem {
   gravidade: 'critica' | 'atencao';
   detalhe: string;
 }
+
+export type FilaTipo = 'inatividade' | 'ficha' | 'plano' | 'avaliacao';
+
+export interface FilaAcaoItem {
+  aluno: Usuario;
+  tipo: FilaTipo;
+  label: string;
+  emoji: string;
+  cor: 'red' | 'amber' | 'neutral' | 'sky' | 'orange';
+  detalhe: string;
+  prioridade: number;
+  extra?: string;
+}
+
+export type FiltroFila = 'todos' | 'inatividade' | 'ficha' | 'plano' | 'avaliacao';
 
 export interface AlunoRankingItem {
   aluno: Usuario;
@@ -55,15 +58,19 @@ export interface AlunoRankingItem {
 export default function DashboardGestor() {
   const navigate = useNavigate();
   const { profile } = useAuth();
-  const { alunos, loading: loadingAlunos } = useAlunos();
+  const { alunos, loading: loadingAlunos, refetch: refetchAlunos } = useAlunos();
 
-  const [filtroRisco, setFiltroRisco] = useState<'todos' | 'inatividade' | 'ficha' | 'dieta'>('todos');
+  const [filtroFila, setFiltroFila] = useState<FiltroFila>('todos');
   const [abaGamificacao, setAbaGamificacao] = useState<'streak' | 'tonelagem'>('streak');
 
+  // Renovação de planos
+  const [renovandoId, setRenovandoId] = useState<string | null>(null);
+  const [feedbackRenovacao, setFeedbackRenovacao] = useState<{ tipo: 'ok' | 'erro'; msg: string } | null>(null);
+
   // Estados de dados calculados reais
-  const [fichasAtivasCount, setFichasAtivasCount] = useState<number>(0);
   const [avaliacoesPendentesCount, setAvaliacoesPendentesCount] = useState<number>(0);
-  const [dadosSemana, setDadosSemana] = useState<{ dia: string; count: number }[]>([]);
+  const [alunosSemAvaliacao, setAlunosSemAvaliacao] = useState<string[]>([]);
+  const [adesaoPct, setAdesaoPct] = useState<number | null>(null);
   const [alunosRisco, setAlunosRisco] = useState<AlunoRiscoItem[]>([]);
   const [alunosRanking, setAlunosRanking] = useState<AlunoRankingItem[]>([]);
   const [loadingMetricas, setLoadingMetricas] = useState<boolean>(true);
@@ -88,10 +95,7 @@ export default function DashboardGestor() {
 
   // Contagens de alunos reais
   const totalAlunos = alunos?.length || 0;
-  const totalVip = alunos?.filter(a => a.pacote === 'VIP').length || 0;
-  const totalPremium = alunos?.filter(a => a.pacote === 'Premium' || !a.pacote).length || 0;
   const totalAtivos = alunos?.filter(a => a.status === 'ativo').length || 0;
-  const totalPendentes = alunos?.filter(a => a.status === 'pendente').length || 0;
 
   // Carregar métricas reais do Supabase para os alunos cadastrados
   const carregarMetricasReais = useCallback(async () => {
@@ -99,19 +103,11 @@ export default function DashboardGestor() {
       setLoadingMetricas(true);
 
       if (!alunos || alunos.length === 0) {
-        setFichasAtivasCount(0);
         setAvaliacoesPendentesCount(0);
+        setAlunosSemAvaliacao([]);
+        setAdesaoPct(null);
         setAlunosRisco([]);
         setAlunosRanking([]);
-        setDadosSemana([
-          { dia: 'Seg', count: 0 },
-          { dia: 'Ter', count: 0 },
-          { dia: 'Qua', count: 0 },
-          { dia: 'Qui', count: 0 },
-          { dia: 'Sex', count: 0 },
-          { dia: 'Sáb', count: 0 },
-          { dia: 'Dom', count: 0 },
-        ]);
         setLoadingMetricas(false);
         return;
       }
@@ -125,7 +121,18 @@ export default function DashboardGestor() {
         .in('user_id', alunoIds)
         .eq('status', 'ativa');
 
-      setFichasAtivasCount(fichas?.filter(f => f.tipo === 'treino').length || 0);
+      // 1b. Alunos sem avaliação física registrada (qualquer status da ficha)
+      const { data: fichasAvaliacao } = await supabase
+        .from('fichas')
+        .select('user_id')
+        .in('user_id', alunoIds)
+        .eq('tipo', 'avaliacao');
+
+      const alunosComAvaliacao = new Set((fichasAvaliacao || []).map(f => f.user_id));
+      setAlunosSemAvaliacao(alunos.filter(a => a.status !== 'inativo' && !alunosComAvaliacao.has(a.id)).map(a => a.id));
+      setAvaliacoesPendentesCount(
+        alunos.filter(a => a.status !== 'inativo' && !alunosComAvaliacao.has(a.id)).length
+      );
 
       // 2. Buscar logs de treino recentes (últimos 30 dias)
       const agora = new Date();
@@ -179,18 +186,42 @@ export default function DashboardGestor() {
         }
       }
 
-      // 4. Calcular Sparkline dos últimos 7 dias
-      const diasSemanaNomes = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
-      const ultimos7Dias: { dia: string; count: number }[] = [];
+      // 4. Adesão % = treinos realizados na semana atual ÷ treinos planejados na semana atual
+      try {
+        const { data: planejamento } = await supabase
+          .from('planejamento_semanal')
+          .select('user_id, dia_semana, treino_id')
+          .in('user_id', alunoIds);
 
-      for (let i = 6; i >= 0; i--) {
-        const d = new Date(agora.getTime() - i * 24 * 60 * 60 * 1000);
-        const iso = d.toISOString().split('T')[0];
-        const nomeDia = diasSemanaNomes[d.getDay()];
-        const count = logsTreino?.filter(l => l.data_execucao === iso).length || 0;
-        ultimos7Dias.push({ dia: nomeDia, count });
+        const metaPorAluno = new Map<string, number>();
+        for (const p of (planejamento || [])) {
+          if (!p.treino_id) continue;
+          metaPorAluno.set(p.user_id, (metaPorAluno.get(p.user_id) || 0) + 1);
+        }
+        const metaSemana = [...metaPorAluno.values()].reduce((s, n) => s + n, 0);
+
+        const agoraSP = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Sao_Paulo' }));
+        const diaAtual = agoraSP.getDay();
+        const diffSeg = (diaAtual === 0 ? -6 : 1) - diaAtual;
+        const inicioSemana = new Date(agoraSP);
+        inicioSemana.setDate(agoraSP.getDate() + diffSeg - 6);
+        const fimSemana = new Date(inicioSemana);
+        fimSemana.setDate(inicioSemana.getDate() + 6);
+        const isoInicio = inicioSemana.toISOString().split('T')[0];
+        const isoFim = fimSemana.toISOString().split('T')[0];
+
+        const realizadosSemana = (logsTreino || []).filter(l =>
+          l.data_execucao >= isoInicio && l.data_execucao <= isoFim
+        ).length;
+
+        if (metaSemana > 0) {
+          setAdesaoPct(Math.min(Math.round((realizadosSemana / metaSemana) * 100), 100));
+        } else {
+          setAdesaoPct(null);
+        }
+      } catch {
+        setAdesaoPct(null);
       }
-      setDadosSemana(ultimos7Dias);
 
       // 5. Construir Alunos em Risco (Apenas alunos reais)
       const listaRisco: AlunoRiscoItem[] = [];
@@ -266,12 +297,6 @@ export default function DashboardGestor() {
     carregarMetricasReais();
   }, [carregarMetricasReais]);
 
-  // Alunos em risco filtrados
-  const alunosRiscoFiltrados = useMemo(() => {
-    if (filtroRisco === 'todos') return alunosRisco;
-    return alunosRisco.filter(a => a.tipo === filtroRisco);
-  }, [alunosRisco, filtroRisco]);
-
   // Ranking ordenado
   const rankingOrdenado = useMemo(() => {
     const list = [...alunosRanking];
@@ -281,639 +306,455 @@ export default function DashboardGestor() {
     return list.sort((a, b) => b.tonelagemKg - a.tonelagemKg || b.treinosMes - a.treinosMes);
   }, [alunosRanking, abaGamificacao]);
 
-  // WhatsApp handlers com alunos reais
-  function abrirWhatsAppIncentivo(item: AlunoRiscoItem) {
-    const { aluno } = item;
-    if (!aluno.telefone) {
-      alert(`O aluno ${aluno.nome} não possui telefone cadastrado.`);
-      return;
+  // ======================================================
+  // PLANOS E RENOVAÇÃO (vence em X dias, +30 dias)
+  // ======================================================
+  const dataSP = useMemo(() => {
+    const parts = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'America/Sao_Paulo',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).format(new Date());
+    return parts;
+  }, []);
+
+  const datasPlanos = useMemo(() => {
+    const espelho = new Map<string, { vencimento: Date; dias: number; estado: 'em_dia' | 'atencao' | 'vencido' }>();
+    const hoje = Date.parse(dataSP);
+    for (const aluno of alunos) {
+      if (!aluno.plano_vencimento) continue;
+      const venc = Date.parse(aluno.plano_vencimento.slice(0, 10));
+      if (Number.isNaN(venc)) continue;
+      const dias = Math.round((venc - hoje) / 86400000);
+      espelho.set(aluno.id, {
+        vencimento: new Date(venc),
+        dias,
+        estado: dias < 0 ? 'vencido' : dias <= 7 ? 'atencao' : 'em_dia',
+      });
     }
-    const primeiroNome = aluno.nome.split(' ')[0];
-    let msg = `Olá ${primeiroNome}! Tudo bem? Vi aqui no nosso app que você não treinou nos últimos dias. Está precisando de algum ajuste ou ajuda? Vamos pra cima! 💪🔥`;
-    
-    if (item.tipo === 'ficha') {
-      msg = `Fala ${primeiroNome}! Notei que sua ficha de treino precisa ser atualizada. Estou organizando seu plano para você manter o foco! 🏋️‍♂️`;
+    return espelho;
+  }, [alunos, dataSP]);
+
+  // ======================================================
+  // FILA DE AÇÃO UNIFICADA (ficha, inatividade, planos, avaliação)
+  // ======================================================
+  const filaAcao = useMemo((): FilaAcaoItem[] => {
+    const map = new Map<string, FilaAcaoItem>();
+    const semAvaliacaoSet = new Set(alunosSemAvaliacao);
+
+    const put = (item: FilaAcaoItem) => {
+      const existente = map.get(item.aluno.id);
+      if (!existente || item.prioridade < existente.prioridade) {
+        map.set(item.aluno.id, item);
+      }
+    };
+
+    // Planos (maior prioridade: vencido)
+    for (const aluno of alunos) {
+      const info = datasPlanos.get(aluno.id);
+      if (!info || info.estado === 'em_dia') continue;
+      if (info.estado === 'vencido') {
+        put({
+          aluno,
+          tipo: 'plano',
+          label: `Plano vencido há ${Math.abs(info.dias)} ${Math.abs(info.dias) === 1 ? 'dia' : 'dias'}`,
+          emoji: '🔴',
+          cor: 'red',
+          detalhe: `Vencimento: ${info.vencimento.toLocaleDateString('pt-BR')}`,
+          prioridade: 10,
+        });
+      } else {
+        put({
+          aluno,
+          tipo: 'plano',
+          label: info.dias === 0 ? 'Plano vence HOJE' : `Plano vence em ${info.dias} ${info.dias === 1 ? 'dia' : 'dias'}`,
+          emoji: '🟠',
+          cor: 'orange',
+          detalhe: `Vencimento: ${info.vencimento.toLocaleDateString('pt-BR')}`,
+          prioridade: 30,
+          extra: 'renovar',
+        });
+      }
     }
 
-    const url = `https://api.whatsapp.com/send?phone=55${aluno.telefone.replace(/\D/g, '')}&text=${encodeURIComponent(msg)}`;
-    window.open(url, '_blank', 'noopener,noreferrer');
+    // Ficha sem ativa (crítico) e inatividade
+    for (const r of alunosRisco) {
+      if (r.tipo === 'ficha') {
+        put({
+          aluno: r.aluno,
+          tipo: 'ficha',
+          label: 'Sem Ficha Ativa',
+          emoji: '⛔',
+          cor: 'red',
+          detalhe: r.detalhe,
+          prioridade: 20,
+        });
+      } else if (r.tipo === 'inatividade') {
+        const dias = /há (\d+) dias/.exec(r.motivo);
+        const n = dias ? parseInt(dias[1], 10) : 0;
+        const critico = r.gravidade === 'critica';
+        put({
+          aluno: r.aluno,
+          tipo: 'inatividade',
+          label: `Inativo há ${n} ${n === 1 ? 'dia' : 'dias'}`,
+          emoji: critico ? '🟠' : '🟡',
+          cor: critico ? 'orange' : 'neutral',
+          detalhe: r.detalhe || r.motivo,
+          prioridade: critico ? 25 : 40,
+        });
+      }
+    }
+
+    // Avaliação pendente (não sobrescreve outros itens mais graves)
+    for (const aluno of alunos) {
+      if (aluno.status === 'inativo') continue;
+      if (!semAvaliacaoSet.has(aluno.id)) continue;
+      if (!map.has(aluno.id)) {
+        put({
+          aluno,
+          tipo: 'avaliacao',
+          label: 'Avaliação pendente',
+          emoji: '🔵',
+          cor: 'sky',
+          detalhe: 'Avaliação física não registrada',
+          prioridade: 50,
+        });
+      } else {
+        // adiciona como destaque secundário
+        const existente = map.get(aluno.id)!;
+        if (!existente.extra) existente.extra = 'avaliacao';
+      }
+    }
+
+    const lista = [...map.values()];
+    lista.sort((a, b) => {
+      const aVencido = a.tipo === 'plano' && datasPlanos.get(a.aluno.id)?.estado === 'vencido';
+      const bVencido = b.tipo === 'plano' && datasPlanos.get(b.aluno.id)?.estado === 'vencido';
+      if (aVencido !== bVencido) return aVencido ? -1 : 1;
+      if (a.prioridade !== b.prioridade) return a.prioridade - b.prioridade;
+      return (a.aluno.nome || '').localeCompare(b.aluno.nome || '');
+    });
+    return lista;
+  }, [alunos, alunosRisco, alunosSemAvaliacao, datasPlanos]);
+
+  const filaAcaoFiltrada = useMemo(() => {
+    if (filtroFila === 'todos') return filaAcao;
+    return filaAcao.filter(i => i.tipo === filtroFila);
+  }, [filaAcao, filtroFila]);
+
+  async function renovarPlano(aluno: Usuario) {
+    if (!window.confirm(`Renovar o plano de ${aluno.nome} por mais 30 dias?`)) return;
+    setRenovandoId(aluno.id);
+    setFeedbackRenovacao(null);
+    try {
+      await usuarios.renovarPlano(aluno.id);
+      await refetchAlunos();
+      setFeedbackRenovacao({ tipo: 'ok', msg: `Plano de ${aluno.nome} renovado por mais 30 dias.` });
+    } catch (e: any) {
+      setFeedbackRenovacao({ tipo: 'erro', msg: e?.message || 'Falha ao renovar o plano. Tente novamente.' });
+    } finally {
+      setRenovandoId(null);
+      setTimeout(() => setFeedbackRenovacao(null), 5000);
+    }
   }
-
-  function abrirWhatsAppParabens(item: AlunoRankingItem) {
-    const { aluno } = item;
-    if (!aluno.telefone) {
-      alert(`O aluno ${aluno.nome} não possui telefone cadastrado.`);
-      return;
-    }
-    const primeiroNome = aluno.nome.split(' ')[0];
-    const msg = `Fala ${primeiroNome}! Passando para parabenizar pela disciplina nos treinos este mês! Continue com essa dedicação monstra! 🏆👊`;
-    const url = `https://api.whatsapp.com/send?phone=55${aluno.telefone.replace(/\D/g, '')}&text=${encodeURIComponent(msg)}`;
-    window.open(url, '_blank', 'noopener,noreferrer');
-  }
-
-  const maxSparkCount = Math.max(...dadosSemana.map(d => d.count), 1);
 
   return (
-    <div id="dashboard-gestor-root" className="min-h-screen bg-[#0A0A0B] text-bone p-4 md:p-7 pb-24 md:pb-8">
-      <div className="max-w-7xl mx-auto space-y-7">
-        
+    <div id="dashboard-gestor-root" className="min-h-screen bg-zinc-950 text-bone p-4 md:p-7 pb-24 md:pb-8">
+      <div className="max-w-7xl mx-auto space-y-6">
+
         {/* ========================================== */}
-        {/* 1. CABEÇALHO INDUSTRIAL DA SALA DE COMANDO */}
+        {/* 1. CABEÇALHO + BARRA DE STATUS */}
         {/* ========================================== */}
-        <header id="dashboard-header" className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 border-b border-line pb-6">
-          <div className="space-y-1">
+        <header id="dashboard-header" className="flex flex-col gap-5">
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
             <div className="flex items-center gap-3">
-              <div className="w-11 h-11 bg-gradient-to-br from-accent-light to-plate flex items-center justify-center clip-bevel-sm shadow-[inset_0_1px_0_rgba(255,255,255,0.4)]">
-                <Activity size={22} strokeWidth={2.5} className="text-[#170B04]" />
+              <div className="w-10 h-10 bg-gradient-to-br from-accent-light to-plate flex items-center justify-center clip-bevel-sm shadow-[inset_0_1px_0_rgba(255,255,255,0.4)]">
+                <Activity size={20} strokeWidth={2.5} className="text-[#170B04]" />
               </div>
               <div>
-                <span className="font-display text-[11px] tracking-[0.14em] uppercase text-accent-light block">
-                  Painel de Controle do Treinador
+                <span className="font-display text-[10px] tracking-[0.14em] uppercase text-accent-light block">
+                  Painel de Controle
                 </span>
                 <h1 className="font-display uppercase text-2xl md:text-3xl tracking-wide text-bone leading-none">
-                  SALA DE COMANDO
+                  Sala de Comando
                 </h1>
               </div>
             </div>
-            <p className="text-xs md:text-sm text-muted-steel flex items-center gap-2 pt-1">
-              <Calendar size={13} className="text-muted-steel" />
-              <span>{dataHojeFormatada}</span>
-              <span className="text-[#4A4A50]">•</span>
-              <span>Treinador: <b className="text-bone">{profile?.nome || 'Admin'}</b></span>
-            </p>
+
+            <div className="flex items-center gap-3 self-start md:self-auto flex-wrap">
+              <button
+                id="btn-cadastrar-aluno"
+                onClick={() => navigate('/alunos')}
+                className="btn-forge text-xs md:text-sm h-11 px-5 gap-2"
+              >
+                <UserPlus size={16} />
+                <span>Cadastrar Aluno</span>
+              </button>
+              <button
+                id="btn-relatorios"
+                onClick={() => navigate('/relatorios')}
+                className="btn-steel text-xs md:text-sm h-11 px-4"
+              >
+                <FileText size={15} />
+                <span>Relatórios</span>
+              </button>
+            </div>
           </div>
 
-          {/* Ações rápidas com botões industriais oficiais */}
-          <div className="flex items-center gap-3 self-start md:self-auto flex-wrap">
-            <button
-              id="btn-cadastrar-aluno"
-              onClick={() => navigate('/alunos')}
-              className="btn-forge text-xs md:text-sm h-11 px-5 gap-2"
-            >
-              <UserPlus size={16} />
-              <span>Cadastrar Aluno</span>
-            </button>
-            <button
-              id="btn-relatorios"
-              onClick={() => navigate('/relatorios')}
-              className="btn-steel text-xs md:text-sm h-11 px-4"
-            >
-              <FileText size={15} />
-              <span>Relatórios</span>
-            </button>
+          {/* Barra de Status minimalista (KPIs em texto limpo) */}
+          <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-sm text-zinc-300">
+            <span className="flex items-center gap-2">
+              <Users size={15} className="text-orange-500" />
+              <b className="text-zinc-100 font-bold">{totalAtivos}</b>
+              Alunos Ativos
+            </span>
+            <span className="text-zinc-700 select-none">|</span>
+            <span className="flex items-center gap-2">
+              <AlertTriangle size={15} className="text-orange-500" />
+              <b className="text-zinc-100 font-bold">{filaAcao.length}</b>
+              Pendências
+            </span>
+            <span className="text-zinc-700 select-none">|</span>
+            <span className="flex items-center gap-2">
+              <TrendingUp size={15} className="text-orange-500" />
+              <b className="text-zinc-100 font-bold">{adesaoPct === null ? '—' : `${adesaoPct}%`}</b>
+              Adesão
+            </span>
+            <span className="text-xs text-zinc-600 ml-auto hidden md:inline">{dataHojeFormatada} · {profile?.nome || 'Admin'}</span>
           </div>
         </header>
 
         {/* ========================================== */}
-        {/* 2. GRID DE KPIS (DADOS REAIS DOS ALUNOS) */}
+        {/* 2. GRID PRINCIPAL (FILA DE AÇÃO | HALL DA FAMA) */}
         {/* ========================================== */}
-        <section id="kpi-grid" aria-label="Indicadores de Performance" className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          
-          {/* CARD 1: Alunos Cadastrados */}
-          <div
-            id="kpi-card-alunos-ativos"
-            onClick={() => navigate('/alunos')}
-            className="group cursor-pointer bg-panel border border-line clip-bevel-sm p-4 md:p-5 transition-all duration-150 card-hover flex flex-col justify-between"
-          >
-            <div className="flex items-start justify-between mb-2">
-              <span className="font-display text-[11px] tracking-[0.14em] uppercase text-muted-steel group-hover:text-accent-light transition-colors">
-                Alunos Cadastrados
-              </span>
-              <div className="w-8 h-8 clip-bevel-sm bg-accent/10 border border-accent/25 flex items-center justify-center text-accent-light group-hover:bg-accent group-hover:text-[#170B04] transition-colors">
-                <Users size={16} />
-              </div>
-            </div>
-            <div>
-              <div className="flex items-baseline gap-2">
-                <span className="font-display text-3xl md:text-4xl text-bone tracking-tight">
-                  {totalAlunos}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
+
+          {/* ========================================== */}
+          {/* COLUNA ESQUERDA (65%): FILA DE AÇÃO */}
+          {/* ========================================== */}
+          <section id="fila-acao" className="lg:col-span-8">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-3">
+              <div className="flex items-center gap-2">
+                <span className="font-display text-base md:text-lg tracking-wide text-bone uppercase">
+                  Fila de Ação
                 </span>
-                {totalPendentes > 0 ? (
-                  <span className="text-[10.5px] font-bold text-amber-400 bg-amber-500/10 border border-amber-500/20 px-1.5 py-0.5 clip-bevel-sm">
-                    {totalPendentes} convite pendente
-                  </span>
-                ) : (
-                  <span className="text-[10.5px] font-bold text-ok bg-ok/10 border border-ok/20 px-1.5 py-0.5 clip-bevel-sm">
-                    {totalAtivos} ativos
+                {filaAcao.length > 0 && (
+                  <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-orange-500/15 text-orange-300">
+                    {filaAcao.length}
                   </span>
                 )}
               </div>
-              <div className="mt-3 flex items-center gap-2 pt-2.5 border-t border-line text-[11px]">
-                <span className="inline-flex items-center gap-1 px-2 py-0.5 clip-bevel-sm bg-accent/15 border border-accent/30 text-accent-light font-bold">
-                  <Crown size={11} className="text-accent" /> {totalVip} VIP
-                </span>
-                <span className="inline-flex items-center gap-1 px-2 py-0.5 clip-bevel-sm bg-amber-500/10 border border-amber-500/25 text-amber-300 font-bold">
-                  {totalPremium} Premium
-                </span>
-              </div>
-            </div>
-          </div>
 
-          {/* CARD 2: Fichas Ativas */}
-          <div
-            id="kpi-card-treinos-vencer"
-            onClick={() => navigate('/alunos')}
-            className="group cursor-pointer bg-panel border border-line clip-bevel-sm p-4 md:p-5 transition-all duration-150 card-hover flex flex-col justify-between"
-          >
-            <div className="flex items-start justify-between mb-2">
-              <span className="font-display text-[11px] tracking-[0.14em] uppercase text-muted-steel group-hover:text-accent-light transition-colors">
-                Fichas Ativas
-              </span>
-              <div className="w-8 h-8 clip-bevel-sm bg-accent/10 border border-accent/25 flex items-center justify-center text-accent-light group-hover:bg-accent group-hover:text-[#170B04] transition-colors">
-                <Dumbbell size={16} />
-              </div>
-            </div>
-            <div>
-              <div className="flex items-baseline gap-2">
-                <span className="font-display text-3xl md:text-4xl text-bone tracking-tight">
-                  {fichasAtivasCount}
-                </span>
-                <span className="text-[10.5px] font-bold text-muted-steel bg-[#1C1C20] border border-line px-1.5 py-0.5 clip-bevel-sm">
-                  prescritas
-                </span>
-              </div>
-              <p className="mt-3 text-[11px] text-muted-steel pt-2.5 border-t border-line truncate">
-                Fichas de treino em andamento
-              </p>
-            </div>
-          </div>
-
-          {/* CARD 3: Alunos em Alerta */}
-          <div
-            id="kpi-card-alertas"
-            onClick={() => navigate('/alunos')}
-            className="group cursor-pointer bg-panel border border-line clip-bevel-sm p-4 md:p-5 transition-all duration-150 card-hover flex flex-col justify-between"
-          >
-            <div className="flex items-start justify-between mb-2">
-              <span className="font-display text-[11px] tracking-[0.14em] uppercase text-muted-steel group-hover:text-amber-400 transition-colors">
-                Radar de Atenção
-              </span>
-              <div className="w-8 h-8 clip-bevel-sm bg-amber-500/10 border border-amber-500/25 flex items-center justify-center text-amber-400 group-hover:bg-amber-500 group-hover:text-[#170B04] transition-colors">
-                <AlertTriangle size={16} />
-              </div>
-            </div>
-            <div>
-              <div className="flex items-baseline gap-2">
-                <span className="font-display text-3xl md:text-4xl text-bone tracking-tight">
-                  {alunosRisco.length}
-                </span>
-                {alunosRisco.length > 0 ? (
-                  <span className="text-[10.5px] font-bold text-amber-400 bg-amber-500/10 border border-amber-500/25 px-1.5 py-0.5 clip-bevel-sm">
-                    Requer Ação
-                  </span>
-                ) : (
-                  <span className="text-[10.5px] font-bold text-ok bg-ok/10 border border-ok/20 px-1.5 py-0.5 clip-bevel-sm">
-                    Tudo em Dia
-                  </span>
-                )}
-              </div>
-              <p className="mt-3 text-[11px] text-muted-steel pt-2.5 border-t border-line truncate">
-                Inatividade ou sem treino prescrito
-              </p>
-            </div>
-          </div>
-
-          {/* CARD 4: Frequência Semanal (Sparkline dos 7 dias) */}
-          <div
-            id="kpi-card-frequencia"
-            className="bg-panel border border-line clip-bevel-sm p-4 md:p-5 flex flex-col justify-between"
-          >
-            <div className="flex items-start justify-between mb-2">
-              <span className="font-display text-[11px] tracking-[0.14em] uppercase text-muted-steel">
-                Treinos na Semana
-              </span>
-              <div className="w-8 h-8 clip-bevel-sm bg-accent/10 border border-accent/25 flex items-center justify-center text-accent-light">
-                <TrendingUp size={16} />
+              {/* Filtros */}
+              <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0">
+                {([
+                  ['todos', 'Todos'],
+                  ['inatividade', 'Inativos'],
+                  ['ficha', 'Fichas'],
+                  ['plano', 'Planos'],
+                  ['avaliacao', 'Avaliações'],
+                ] as [FiltroFila, string][]).map(([valor, rotulo]) => (
+                  <button
+                    key={valor}
+                    onClick={() => setFiltroFila(valor)}
+                    className={`tab-chip min-h-[30px] px-3 text-xs font-semibold ${
+                      filtroFila === valor ? 'tab-chip-active bg-accent/20 border-accent text-accent-light' : 'text-zinc-400'
+                    }`}
+                  >
+                    {rotulo}
+                  </button>
+                ))}
               </div>
             </div>
 
-            <div className="space-y-2">
-              <div className="flex items-baseline justify-between">
-                <span className="font-display text-3xl md:text-4xl text-bone tracking-tight">
-                  {dadosSemana.reduce((sum, d) => sum + d.count, 0)}
-                </span>
-                <span className="text-[10.5px] font-bold text-muted-steel">
-                  concluídos
-                </span>
+            {loadingAlunos || loadingMetricas ? (
+              <div className="py-12 flex flex-col items-center justify-center gap-3 text-zinc-400 bg-zinc-900/50 rounded-xl">
+                <Loader2 size={22} className="animate-spin text-accent-light" />
+                <span className="text-xs">Analisando a fila de trabalho...</span>
               </div>
-
-              {/* Sparkline estilo anilha de ferro */}
-              <div className="pt-2">
-                <div className="flex items-end justify-between gap-1.5 h-7 px-0.5">
-                  {dadosSemana.map((d, i) => {
-                    const isLast = i === dadosSemana.length - 1;
-                    const heightPx = Math.max(4, Math.round((d.count / maxSparkCount) * 24));
-                    return (
-                      <div key={d.dia + i} className="flex-1 flex flex-col items-center gap-1 group/bar">
-                        <div
-                          className={`w-full transition-all duration-300 relative ${
-                            d.count > 0
-                              ? isLast
-                                ? 'bg-gradient-to-t from-accent to-accent-light shadow-[0_0_8px_rgba(255,90,31,0.5)]'
-                                : 'bg-accent/70 group-hover/bar:bg-accent-light'
-                              : 'bg-[#232328]'
-                          }`}
-                          style={{ height: `${heightPx}px` }}
-                        />
-                        <span className="text-[9px] text-[#5D5D64] font-mono leading-none">{d.dia}</span>
+            ) : totalAlunos === 0 ? (
+              <div className="py-12 px-4 text-center flex flex-col items-center justify-center gap-3 bg-zinc-900/50 rounded-xl">
+                <div className="w-12 h-12 clip-bevel-sm bg-accent/10 border border-accent/25 flex items-center justify-center text-accent-light">
+                  <UserPlus size={22} />
+                </div>
+                <h3 className="font-display uppercase text-base text-bone tracking-wide">
+                  Nenhum Aluno Cadastrado
+                </h3>
+                <p className="text-xs text-zinc-400 max-w-sm">
+                  Cadastre seus primeiros alunos para começar a construir a sua fila de trabalho e monitorar resultados.
+                </p>
+                <button onClick={() => navigate('/alunos')} className="btn-forge h-10 px-4 text-xs mt-2">
+                  <UserPlus size={15} />
+                  <span>Cadastrar Primeiro Aluno</span>
+                </button>
+              </div>
+            ) : filaAcaoFiltrada.length === 0 ? (
+              <div className="py-10 px-4 text-center flex flex-col items-center justify-center gap-2 bg-zinc-900/50 rounded-xl">
+                <CheckCircle2 size={30} className="text-ok" />
+                <h3 className="font-display uppercase text-sm text-bone tracking-wide">
+                  Tudo em Ordem!
+                </h3>
+                <p className="text-xs text-zinc-400 max-w-xs">
+                  Nenhuma pendência neste filtro no momento.
+                </p>
+              </div>
+            ) : (
+              <div className="bg-zinc-900/50 rounded-xl divide-y divide-zinc-800/50 overflow-hidden">
+                {filaAcaoFiltrada.map(item => {
+                  const { aluno } = item;
+                  const corTag = {
+                    red: 'bg-red-500/10 text-red-300 border-red-500/30',
+                    orange: 'bg-orange-500/10 text-orange-300 border-orange-500/30',
+                    amber: 'bg-amber-500/10 text-amber-300 border-amber-500/30',
+                    neutral: 'bg-zinc-500/10 text-zinc-300 border-zinc-500/30',
+                    sky: 'bg-sky-500/10 text-sky-300 border-sky-500/30',
+                  }[item.cor];
+                  return (
+                    <div key={aluno.id} className="flex items-center gap-3 px-4 py-3 min-w-0">
+                      <StudentAvatar size="sm" />
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="text-sm font-bold text-bone truncate">{aluno.nome}</span>
+                          <span className={`inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 border rounded-md ${corTag}`}>
+                            <span aria-hidden>{item.emoji}</span>
+                            {item.label}
+                          </span>
+                        </div>
+                        <p className="text-xs text-zinc-500 mt-0.5 truncate">
+                          {item.detalhe}
+                          {item.extra === 'avaliacao' && <span className="text-muted-steel"> · + Aval. pendente</span>}
+                        </p>
                       </div>
-                    );
-                  })}
-                </div>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        {/* ========================================== */}
-        {/* 3. SEÇÃO CENTRAL (RADAR & GAMIFICAÇÃO REAIS) */}
-        {/* ========================================== */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-          
-          {/* ========================================== */}
-          {/* COLUNA ESQUERDA: RADAR DE ATENÇÃO */}
-          {/* ========================================== */}
-          <section id="radar-atencao-section" className="lg:col-span-7 bg-panel border border-line clip-bevel-sm p-4 md:p-6 flex flex-col justify-between">
-            <div>
-              {/* Header do Radar */}
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-5 pb-4 border-b border-line">
-                <div className="flex items-center gap-3">
-                  <div className="relative flex items-center justify-center">
-                    <div className={`w-3.5 h-3.5 rounded-full ${alunosRisco.length > 0 ? 'bg-red-500 animate-ping absolute opacity-75' : 'bg-ok'}`} />
-                    <div className={`w-3 h-3 rounded-full relative ${alunosRisco.length > 0 ? 'bg-red-500 shadow-[0_0_8px_#ef4444]' : 'bg-ok'}`} />
-                  </div>
-                  <div>
-                    <h2 className="font-display uppercase text-lg tracking-wide text-bone flex items-center gap-2">
-                      RADAR DE ATENÇÃO
-                      <span className={`font-sans text-[10px] font-bold px-2 py-0.5 clip-bevel-sm ${
-                        alunosRisco.length > 0 ? 'bg-red-500/20 text-red-300 border border-red-500/40' : 'bg-ok/20 text-ok border border-ok/40'
-                      }`}>
-                        {alunosRisco.length} {alunosRisco.length === 1 ? 'ALERTA' : 'ALERTAS'}
-                      </span>
-                    </h2>
-                    <p className="text-xs text-zinc-400">Identificação de inatividade e pendências dos seus alunos</p>
-                  </div>
-                </div>
-
-                {/* Filtros em tab-chip */}
-                <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0">
-                  <button
-                    onClick={() => setFiltroRisco('todos')}
-                    className={`tab-chip min-h-[34px] px-3 text-xs font-bold ${filtroRisco === 'todos' ? 'tab-chip-active bg-accent/20 border-accent text-accent-light' : 'text-zinc-300'}`}
-                  >
-                    Todos
-                  </button>
-                  <button
-                    onClick={() => setFiltroRisco('inatividade')}
-                    className={`tab-chip min-h-[34px] px-3 text-xs font-bold ${filtroRisco === 'inatividade' ? 'tab-chip-active bg-accent/20 border-accent text-accent-light' : 'text-zinc-300'}`}
-                  >
-                    Inativos
-                  </button>
-                  <button
-                    onClick={() => setFiltroRisco('ficha')}
-                    className={`tab-chip min-h-[34px] px-3 text-xs font-bold ${filtroRisco === 'ficha' ? 'tab-chip-active bg-accent/20 border-accent text-accent-light' : 'text-zinc-300'}`}
-                  >
-                    Fichas
-                  </button>
-                </div>
-              </div>
-
-              {/* Lista de Alunos em Risco */}
-              {loadingAlunos || loadingMetricas ? (
-                <div className="py-12 flex flex-col items-center justify-center gap-3 text-zinc-400">
-                  <Loader2 size={24} className="animate-spin text-accent-light" />
-                  <span className="text-xs">Analisando frequência dos alunos...</span>
-                </div>
-              ) : totalAlunos === 0 ? (
-                /* Estado quando não há nenhum aluno cadastrado */
-                <div className="py-12 px-4 text-center flex flex-col items-center justify-center gap-3 bg-[#101012] clip-bevel-sm border border-dashed border-line">
-                  <div className="w-12 h-12 clip-bevel-sm bg-accent/10 border border-accent/25 flex items-center justify-center text-accent-light">
-                    <UserPlus size={22} />
-                  </div>
-                  <h3 className="font-display uppercase text-base text-bone tracking-wide">
-                    Nenhum Aluno Cadastrado
-                  </h3>
-                  <p className="text-xs text-zinc-400 max-w-sm">
-                    Cadastre seus primeiros alunos para acompanhar frequência, criar fichas de treino personalizadas e monitorar resultados em tempo real.
-                  </p>
-                  <button
-                    onClick={() => navigate('/alunos')}
-                    className="btn-forge h-10 px-4 text-xs mt-2"
-                  >
-                    <UserPlus size={15} />
-                    <span>Cadastrar Primeiro Aluno</span>
-                  </button>
-                </div>
-              ) : alunosRiscoFiltrados.length === 0 ? (
-                /* Estado quando todos os alunos estão em dia */
-                <div className="py-10 px-4 text-center flex flex-col items-center justify-center gap-2 bg-[#101012] clip-bevel-sm border border-line">
-                  <CheckCircle2 size={32} className="text-ok" />
-                  <h3 className="font-display uppercase text-sm text-bone tracking-wide">
-                    Tudo em Ordem!
-                  </h3>
-                  <p className="text-xs text-zinc-400 max-w-xs">
-                    Nenhum aluno com pendência crítica neste filtro no momento.
-                  </p>
-                </div>
-              ) : (
-                <div className="space-y-2.5">
-                  {alunosRiscoFiltrados.map((item) => {
-                    const { aluno } = item;
-                    const isCritico = item.gravidade === 'critica';
-                    return (
-                      <div
-                        key={aluno.id}
-                        className="group bg-[#121214] clip-bevel-sm p-3.5 border border-line card-hover flex flex-col sm:flex-row sm:items-center justify-between gap-3"
+                      <button
+                        onClick={() => item.tipo === 'plano' ? void renovarPlano(aluno) : navigate(`/alunos/${aluno.id}`)}
+                        disabled={item.tipo === 'plano' && renovandoId === aluno.id}
+                        className="btn-forge h-9 px-3 text-xs gap-1 shrink-0 disabled:opacity-50"
                       >
-                        {/* Avatar e Informações */}
-                        <div className="flex items-start sm:items-center gap-3 min-w-0">
-                          <div className="relative shrink-0">
-                            <div className="w-10 h-10 clip-bevel-sm bg-gradient-to-br from-[#232328] to-[#151517] border border-line flex items-center justify-center font-display text-base text-bone shadow-inner font-bold">
-                              {aluno.nome?.charAt(0)?.toUpperCase() || 'A'}
-                            </div>
-                            <span
-                              className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-[#101012] ${
-                                isCritico ? 'bg-red-500 shadow-[0_0_6px_#ef4444]' : 'bg-amber-500 shadow-[0_0_6px_#f59e0b]'
-                              }`}
-                            />
-                          </div>
-
-                          <div className="min-w-0">
-                            <div className="flex items-center gap-2 flex-wrap">
-                              <span className="text-sm font-bold text-bone truncate">{aluno.nome}</span>
-                              <span
-                                className={`text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 clip-bevel-sm ${
-                                  aluno.pacote === 'VIP'
-                                    ? 'bg-accent/20 text-accent-light border border-accent/40'
-                                    : 'bg-amber-500/15 text-amber-300 border border-amber-500/30'
-                                }`}
-                              >
-                                {aluno.pacote || 'Premium'}
-                              </span>
-                            </div>
-
-                            <div className="flex items-center gap-2 mt-1 flex-wrap">
-                              <span
-                                className={`inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 clip-bevel-sm ${
-                                  isCritico
-                                    ? 'bg-red-500/20 text-red-300 border border-red-500/40'
-                                    : 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
-                                }`}
-                              >
-                                <AlertTriangle size={11} />
-                                {item.motivo}
-                              </span>
-                              <span className="text-xs text-zinc-300 truncate font-medium">
-                                {item.detalhe}
-                              </span>
-                            </div>
-                          </div>
-                        </div>
-
-                        {/* Botões de Ação Rápida */}
-                        <div className="flex items-center gap-2 shrink-0 self-end sm:self-center pt-2 sm:pt-0 border-t sm:border-t-0 border-line w-full sm:w-auto justify-end">
-                          {aluno.telefone && (
-                            <button
-                              onClick={() => abrirWhatsAppIncentivo(item)}
-                              title="Enviar mensagem via WhatsApp"
-                              className="btn-steel h-9 px-3 text-xs gap-1.5 text-ok hover:text-ok hover:border-ok/40"
-                            >
-                              <MessageCircle size={14} className="text-ok" />
-                              <span>WhatsApp</span>
-                            </button>
-                          )}
-
-                          <button
-                            onClick={() => navigate(`/alunos/${aluno.id}/prontuario`)}
-                            title="Abrir prontuário do aluno"
-                            className="btn-steel h-9 px-3 text-xs gap-1 font-bold text-bone"
-                          >
-                            <span>Prontuário</span>
-                            <ChevronRight size={13} />
-                          </button>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-
-            {/* Rodapé informativo */}
-            <div className="mt-4 pt-3 border-t border-line flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs text-zinc-400">
-              <span className="flex items-center gap-1.5">
-                <CheckCircle2 size={13} className="text-ok" />
-                Acompanhamento em tempo real sincronizado com a base de dados.
-              </span>
-              <button
-                onClick={() => navigate('/alunos')}
-                className="text-accent-light hover:underline font-bold text-xs self-end sm:self-auto"
-              >
-                Ver todos os alunos &rarr;
-              </button>
-            </div>
+                        {item.tipo === 'plano' ? (
+                          renovandoId === aluno.id ? <Loader2 size={13} className="animate-spin" /> : <RefreshCw size={13} />
+                        ) : (
+                          <ArrowUpRight size={13} />
+                        )}
+                        <span>{item.tipo === 'plano' ? (renovandoId === aluno.id ? 'Renovando' : 'Renovar') : 'Resolver'}</span>
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </section>
 
           {/* ========================================== */}
-          {/* COLUNA DIREITA: HALL DA FAMA (GAMIFICAÇÃO) */}
+          {/* COLUNA DIREITA (35%): HALL DA FAMA */}
           {/* ========================================== */}
-          <section id="hall-da-fama-section" className="lg:col-span-5 bg-panel border border-line clip-bevel-sm p-4 md:p-6 flex flex-col justify-between">
-            <div>
-              {/* Header do Hall da Fama */}
-              <div className="flex items-center justify-between gap-3 mb-5 pb-4 border-b border-line">
-                <div className="flex items-center gap-3">
-                  <div className="w-9 h-9 clip-bevel-sm bg-gradient-to-br from-accent-light to-plate flex items-center justify-center shadow-[inset_0_1px_0_rgba(255,255,255,0.4)]">
-                    <Trophy size={18} strokeWidth={2.5} className="text-[#170B04]" />
-                  </div>
-                  <div>
-                    <h2 className="font-display uppercase text-lg tracking-wide text-bone flex items-center gap-1.5">
-                      HALL DA FAMA
-                      <span className="text-accent-light">🔥</span>
-                    </h2>
-                    <p className="text-xs text-muted-steel">Desempenho real dos alunos</p>
-                  </div>
-                </div>
-
-                {/* Alternância de Modo */}
-                <div className="flex bg-[#101012] p-1 clip-bevel-sm border border-line">
-                  <button
-                    onClick={() => setAbaGamificacao('streak')}
-                    title="Sequência de treinos concluídos"
-                    className={`px-3 py-1 text-xs font-bold flex items-center gap-1.5 transition-all ${
-                      abaGamificacao === 'streak'
-                        ? 'bg-accent text-[#170B04] shadow-sm font-display uppercase tracking-wide'
-                        : 'text-zinc-300 hover:text-bone hover:bg-[#1C1C20]'
-                    }`}
-                  >
-                    <Flame size={13} className={abaGamificacao === 'streak' ? 'text-[#170B04]' : 'text-accent'} />
-                    <span>Treinos</span>
-                  </button>
-                  <button
-                    onClick={() => setAbaGamificacao('tonelagem')}
-                    title="Volume total de peso levantado"
-                    className={`px-3 py-1 text-xs font-bold flex items-center gap-1.5 transition-all ${
-                      abaGamificacao === 'tonelagem'
-                        ? 'bg-accent text-[#170B04] shadow-sm font-display uppercase tracking-wide'
-                        : 'text-zinc-300 hover:text-bone hover:bg-[#1C1C20]'
-                    }`}
-                  >
-                    <Weight size={13} className={abaGamificacao === 'tonelagem' ? 'text-[#170B04]' : 'text-accent'} />
-                    <span>Volume</span>
-                  </button>
-                </div>
+          <section id="hall-da-fama-section" className="lg:col-span-4 bg-zinc-900/50 rounded-xl p-5">
+            <div className="flex items-center justify-between gap-3 mb-4">
+              <div className="flex items-center gap-2.5">
+                <span className="text-lg leading-none">🏆</span>
+                <h2 className="font-display uppercase text-base tracking-wide text-bone">
+                  Hall da Fama
+                </h2>
               </div>
 
-              {/* Lista do Ranking */}
-              {loadingAlunos || loadingMetricas ? (
-                <div className="py-12 flex flex-col items-center justify-center gap-3 text-zinc-400">
-                  <Loader2 size={24} className="animate-spin text-accent-light" />
-                  <span className="text-xs">Calculando ranking...</span>
-                </div>
-              ) : totalAlunos === 0 ? (
-                <div className="py-12 px-4 text-center flex flex-col items-center justify-center gap-2 bg-[#101012] clip-bevel-sm border border-line">
-                  <Trophy size={28} className="text-zinc-500" />
-                  <h3 className="font-display uppercase text-sm text-bone tracking-wide">
-                    Sem Dados no Ranking
-                  </h3>
-                  <p className="text-xs text-zinc-400 max-w-xs">
-                    Conforme seus alunos executarem e registrarem treinos no app, eles aparecerão classificados aqui.
-                  </p>
-                </div>
-              ) : (
-                <div className="space-y-2.5">
-                  {rankingOrdenado.slice(0, 5).map((item, index) => {
-                    const { aluno } = item;
-                    const isTop1 = index === 0 && (item.treinosMes > 0 || item.tonelagemKg > 0);
-                    const isTop2 = index === 1 && (item.treinosMes > 0 || item.tonelagemKg > 0);
-                    const isTop3 = index === 2 && (item.treinosMes > 0 || item.tonelagemKg > 0);
+              <div className="flex bg-zinc-950 p-0.5 rounded-lg border border-zinc-800">
+                <button
+                  onClick={() => setAbaGamificacao('streak')}
+                  title="Treinos concluídos"
+                  className={`px-2.5 py-1 text-[11px] font-bold flex items-center gap-1.5 transition-all rounded-md ${
+                    abaGamificacao === 'streak' ? 'bg-orange-500/20 text-orange-300' : 'text-zinc-400 hover:text-zinc-200'
+                  }`}
+                >
+                  <Flame size={13} className={abaGamificacao === 'streak' ? 'text-orange-400' : 'text-zinc-500'} />
+                  Treinos
+                </button>
+                <button
+                  onClick={() => setAbaGamificacao('tonelagem')}
+                  title="Volume total levantado"
+                  className={`px-2.5 py-1 text-[11px] font-bold flex items-center gap-1.5 transition-all rounded-md ${
+                    abaGamificacao === 'tonelagem' ? 'bg-orange-500/20 text-orange-300' : 'text-zinc-400 hover:text-zinc-200'
+                  }`}
+                >
+                  <Weight size={13} className={abaGamificacao === 'tonelagem' ? 'text-orange-400' : 'text-zinc-500'} />
+                  Volume
+                </button>
+              </div>
+            </div>
 
-                    return (
-                      <div
-                        key={aluno.id}
-                        className={`group clip-bevel-sm p-3.5 transition-all flex items-center justify-between gap-3 border ${
-                          isTop1
-                            ? 'bg-gradient-to-r from-accent/20 via-[#18181B] to-[#121214] border-accent/50 shadow-[0_0_16px_rgba(255,90,31,0.25)]'
-                            : 'bg-[#121214] hover:bg-[#18181B] border-line card-hover'
-                        }`}
-                      >
-                        {/* Posição + Avatar + Nome */}
-                        <div className="flex items-center gap-3 min-w-0">
-                          {/* Indicador de Posição */}
-                          <div className="w-6 text-center font-display shrink-0 text-lg">
-                            {isTop1 ? '🥇' : isTop2 ? '🥈' : isTop3 ? '🥉' : (
-                              <span className="text-xs font-bold text-zinc-400 font-mono">{index + 1}º</span>
-                            )}
+            {loadingAlunos || loadingMetricas ? (
+              <div className="py-12 flex flex-col items-center justify-center gap-3 text-zinc-400">
+                <Loader2 size={22} className="animate-spin text-accent-light" />
+                <span className="text-xs">Calculando ranking...</span>
+              </div>
+            ) : totalAlunos === 0 ? (
+              <div className="py-12 px-4 text-center flex flex-col items-center justify-center gap-2">
+                <Trophy size={26} className="text-zinc-600" />
+                <h3 className="font-display uppercase text-sm text-bone tracking-wide">Sem Dados</h3>
+                <p className="text-xs text-zinc-500 max-w-xs">
+                  Conforme os alunos treinarem, eles aparecem classificados aqui.
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {rankingOrdenado.slice(0, 5).map((item, index) => {
+                  const { aluno } = item;
+                  const temAtividade = item.treinosMes > 0 || item.tonelagemKg > 0;
+                  const isTop1 = index === 0 && temAtividade;
+                  const isTop2 = index === 1 && temAtividade;
+                  const isTop3 = index === 2 && temAtividade;
+
+                  return (
+                    <div key={aluno.id} className="flex items-center justify-between gap-3">
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        {isTop1 ? (
+                          <span className="text-lg w-7 text-center shrink-0">🔥</span>
+                        ) : isTop2 ? (
+                          <span className="text-lg w-7 text-center shrink-0">🥈</span>
+                        ) : isTop3 ? (
+                          <span className="text-lg w-7 text-center shrink-0">🥉</span>
+                        ) : (
+                          <span className="w-7 text-center text-xs font-bold text-zinc-500 font-mono shrink-0">{index + 1}º</span>
+                        )}
+                        <StudentAvatar size="sm" />
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-sm font-bold text-bone truncate">{aluno.nome}</span>
+                            {isTop1 && <Crown size={13} className="text-amber-400 shrink-0 fill-amber-400" />}
                           </div>
-
-                          {/* Avatar */}
-                          <div className="w-9 h-9 clip-bevel-sm bg-[#1F1F24] border border-line flex items-center justify-center font-display text-sm font-bold text-bone shrink-0 shadow-inner">
-                            {aluno.nome?.charAt(0)?.toUpperCase() || 'A'}
+                          <div className="flex items-center gap-1.5 text-[11px] text-zinc-500">
+                            <span className="text-amber-400/90 font-semibold">{item.badge}</span>
+                            <span className="text-zinc-700">·</span>
+                            <span>{item.treinosMes} treinos/mês</span>
                           </div>
-
-                          <div className="min-w-0">
-                            <div className="flex items-center gap-1.5">
-                              <span className="text-sm font-bold text-bone truncate tracking-wide">
-                                {aluno.nome}
-                              </span>
-                              {isTop1 && (
-                                <Crown size={14} className="text-amber-400 shrink-0 fill-amber-400 drop-shadow-[0_0_4px_rgba(251,191,36,0.5)]" />
-                              )}
-                            </div>
-                            <div className="flex items-center gap-1.5 text-xs text-zinc-300 mt-0.5 font-medium">
-                              <span className="text-amber-400 font-bold">{item.badge}</span>
-                              <span className="text-zinc-500">•</span>
-                              <span className="text-zinc-300">{item.treinosMes} treinos/mês</span>
-                            </div>
-                          </div>
-                        </div>
-
-                        {/* Métricas e Botão de Reconhecimento */}
-                        <div className="flex items-center gap-3 shrink-0">
-                          {abaGamificacao === 'streak' ? (
-                            <div className="text-right">
-                              <div className="flex items-center justify-end gap-1.5">
-                                <Flame size={16} className="text-accent fill-accent animate-pulse" />
-                                <span className="font-display text-base md:text-lg tracking-wider text-bone font-bold">
-                                  {item.treinosMes} <span className="text-accent-light text-xs md:text-sm font-bold">TREINOS</span>
-                                </span>
-                              </div>
-                              <span className="text-[11px] text-zinc-300 font-medium font-mono block">
-                                no mês atual
-                              </span>
-                            </div>
-                          ) : (
-                            <div className="text-right">
-                              <div className="flex items-center justify-end gap-1.5">
-                                <Weight size={15} className="text-accent" />
-                                <span className="font-display text-base md:text-lg tracking-wider text-bone font-bold">
-                                  {(item.tonelagemKg / 1000).toFixed(1)} <span className="text-accent-light text-xs md:text-sm font-bold">TON</span>
-                                </span>
-                              </div>
-                              <span className="text-[11px] text-zinc-300 font-medium font-mono block">
-                                volume levantado
-                              </span>
-                            </div>
-                          )}
-
-                          {/* Botão de Reconhecimento WhatsApp */}
-                          {aluno.telefone && (
-                            <button
-                              onClick={() => abrirWhatsAppParabens(item)}
-                              title="Enviar parabéns pelo WhatsApp"
-                              className="p-2 clip-bevel-sm bg-ok/10 border border-ok/30 text-ok hover:bg-ok hover:text-[#170B04] transition-all min-h-[36px] min-w-[36px] flex items-center justify-center shadow-sm"
-                            >
-                              <MessageCircle size={16} />
-                            </button>
-                          )}
                         </div>
                       </div>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
 
-            {/* Rodapé Gamificação */}
-            <div className="mt-4 pt-3 border-t border-line flex items-center justify-between text-xs text-muted-steel">
-              <span className="flex items-center gap-1.5 text-[11px]">
-                <Sparkles size={13} className="text-accent-light" />
-                Dados dinâmicos calculados a partir dos treinos dos seus alunos.
-              </span>
-            </div>
+                      {abaGamificacao === 'streak' ? (
+                        <div className="text-right shrink-0">
+                          <span className="font-display text-base tracking-wider text-bone font-bold">
+                            {item.treinosMes}
+                          </span>
+                          <span className="text-[10px] text-zinc-500 ml-1">treinos</span>
+                        </div>
+                      ) : (
+                        <div className="text-right shrink-0">
+                          <span className="font-display text-base tracking-wider text-bone font-bold">
+                            {(item.tonelagemKg / 1000).toFixed(1)}<span className="text-[10px] text-zinc-500 ml-1">ton</span>
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            <p className="mt-5 pt-4 border-t border-zinc-800/50 text-[11px] text-zinc-600 flex items-center gap-1.5">
+              <Sparkles size={12} className="text-zinc-500" />
+              Dados calculados a partir dos treinos dos seus alunos.
+            </p>
           </section>
         </div>
-
-        {/* ========================================== */}
-        {/* 4. CENTRAL TÁTICA DE ATALHOS */}
-        {/* ========================================== */}
-        <section id="atalhos-taticos" className="bg-panel border border-line clip-bevel-sm p-4 md:p-5 flex flex-col sm:flex-row items-center justify-between gap-4">
-          <div className="flex items-center gap-3.5 text-sm">
-            <div className="w-9 h-9 clip-bevel-sm bg-[#1C1C20] border border-line flex items-center justify-center text-accent-light">
-              <Shield size={18} />
-            </div>
-            <div>
-              <p className="font-display uppercase text-sm tracking-wide text-bone">Atalhos da Gestão Tática</p>
-              <p className="text-xs text-muted-steel">Acesse rapidamente as ferramentas de cadastro, prescrição e acompanhamento.</p>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-2.5 w-full sm:w-auto overflow-x-auto pb-1 sm:pb-0">
-            <button
-              onClick={() => navigate('/alunos')}
-              className="btn-steel h-10 px-4 text-xs font-bold whitespace-nowrap gap-1.5"
-            >
-              <Users size={14} className="text-accent-light" />
-              <span>Lista de Alunos</span>
-            </button>
-            <button
-              onClick={() => navigate('/relatorios')}
-              className="btn-steel h-10 px-4 text-xs font-bold whitespace-nowrap gap-1.5"
-            >
-              <FileText size={14} className="text-accent-light" />
-              <span>Relatórios</span>
-            </button>
-          </div>
-        </section>
 
       </div>
     </div>

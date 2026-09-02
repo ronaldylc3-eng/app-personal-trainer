@@ -42,7 +42,7 @@ export default function RecuperarSenha() {
       image="/auth/login.jpg"
       fallbackImage={LOGIN_IMAGE_FALLBACK}
       imagePosition="center 32%"
-      eyebrow="FITNESSAPP · TREINOS & DIETA"
+      eyebrow="LOS GYM · TREINOS & DIETA"
       title={<>Perdeu a senha?<br />A gente <em>te ajuda.</em></>}
       description="Digite seu e-mail de cadastro e enviaremos um link para você definir uma nova senha."
     >
@@ -102,7 +102,7 @@ export default function RecuperarSenha() {
       </form>
 
       <p className="mt-7 text-center text-[12.5px] text-[#5D5D64]">
-        <button onClick={() => navigate('/')} className="font-semibold text-accent-light hover:underline">
+        <button onClick={() => navigate('/login')} className="font-semibold text-accent-light hover:underline">
           Voltar para o Login
         </button>
       </p>

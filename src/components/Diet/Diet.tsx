@@ -1,9 +1,11 @@
 import { useState, useEffect } from 'react';
 import { Navigate } from 'react-router-dom';
-import { Apple, Plus, Trash2, Bot, Clock, Pin, Lock, Crown, Check, AlertTriangle, FileText, Pencil, UtensilsCrossed, Loader2 } from 'lucide-react';
+import { Plus, Trash2, Bot, Clock, Pin, Lock, Crown, Check, AlertTriangle, FileText, Pencil, UtensilsCrossed, Loader2 } from 'lucide-react';
+import { TalherFolhaIcon, LogoBadge } from '../icons/AppIcons';
 import { useAlunos } from '../../hooks/useAlunos';
 import { useAuth } from '../../hooks/useAuth';
 import { meals as mealsApi, fixedFoods as fixedFoodsApi, fichas, refeicoesDieta, dieta, hojeSP, METAS_PADRAO } from '../../services/api';
+import { supabase } from '../../lib/supabase';
 import type { Meal, FixedFood, FichaCompleta, RefeicaoDieta, MetasNutricionais } from '../../types';
 
 const MACRO_LABELS: Record<string, string> = { calories: 'Calorias', protein: 'Proteína', carbs: 'Carboidrato', fat: 'Gordura', fiber: 'Fibras' };
@@ -32,6 +34,22 @@ interface MacroResult {
   fat: number;
   fiber: number;
   calories: number;
+}
+
+async function analisarComGroqViaEdge(description: string): Promise<MacroResult> {
+  const { data, error } = await supabase.functions.invoke('analyze-food', {
+    body: { description },
+  });
+  if (error) throw error;
+  const m = (data as { macros?: Record<string, unknown> } | null)?.macros;
+  if (!m) throw new Error('Resposta inesperada da função de IA.');
+  return {
+    protein: Number(m.protein) || 0,
+    carbs: Number(m.carbs) || 0,
+    fat: Number(m.fat) || 0,
+    fiber: Number(m.fiber) || 0,
+    calories: Number(m.calories) || 0,
+  };
 }
 
 async function analisarComGroq(description: string): Promise<MacroResult> {
@@ -298,7 +316,12 @@ function DietView({ alunoId, modoGestor, currentProfile }: DietViewProps) {
     let macros: MacroResult;
 
     try {
-      macros = await analisarComGroq(foodDescription);
+      try {
+        macros = await analisarComGroqViaEdge(foodDescription);
+      } catch (edgeErr) {
+        console.warn('[Diet] Edge Function analyze-food indisponível, usando fallback direto à Groq:', edgeErr);
+        macros = await analisarComGroq(foodDescription);
+      }
     } catch (err) {
       setAnalyzing(false);
       const msg = err instanceof Error ? err.message : 'Erro desconhecido';
@@ -478,9 +501,9 @@ function DietView({ alunoId, modoGestor, currentProfile }: DietViewProps) {
       <div className="max-w-6xl mx-auto">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-8">
           <div className="flex items-center gap-3 mb-2 sm:mb-2">
-            <div className="w-[46px] h-[46px] shrink-0 clip-bevel bg-gradient-to-br from-accent-light to-plate shadow-[inset_0_1px_0_rgba(255,255,255,0.4)] flex items-center justify-center">
-              <Apple size={22} className="text-[#170B04]" />
-            </div>
+            <LogoBadge>
+              <TalherFolhaIcon size={19} strokeWidth={2} className="text-accent-light" />
+            </LogoBadge>
             <div>
               <h1 className="font-display uppercase text-[26px] leading-none tracking-wide text-bone">Dieta</h1>
               <p className="text-sm text-muted-steel mt-1 hidden sm:block">{modoGestor ? 'Prescrição nutricional do aluno.' : 'Seu desempenho começa na alimentação.'}</p>

@@ -1,20 +1,21 @@
 import { NavLink } from 'react-router-dom';
-import { User, Dumbbell, Apple, Home, BarChart3, Users, FileText, Menu, X, ChevronRight, Activity } from 'lucide-react';
+import { User, Home, BarChart3, Users, FileText, Menu, X, ChevronRight, Activity } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { haptics } from '../utils/haptics';
+import { BarraOlimpicaIcon, TalherFolhaIcon, LogoWordmark } from './icons/AppIcons';
 
 const allLinks = [
   { to: '/alunos', label: 'Alunos', icon: Users, vipOnly: true, gestorOnly: true },
-  { to: '/treinos', label: 'Treino', icon: Dumbbell, vipOnly: false, gestorHidden: true },
-  { to: '/dieta', label: 'Dieta', icon: Apple, vipOnly: true, gestorHidden: true },
+  { to: '/treinos', label: 'Treino', icon: BarraOlimpicaIcon, vipOnly: false, gestorHidden: true },
+  { to: '/dieta', label: 'Dieta', icon: TalherFolhaIcon, vipOnly: true, gestorHidden: true },
   { to: '/progresso', label: 'Progressão', icon: BarChart3, vipOnly: false, gestorHidden: true },
   { to: '/relatorios', label: 'Relatórios', icon: FileText, gestorOnly: true },
 ];
 
 const allBottomNavItems = [
   { to: '/inicio', label: 'Início', icon: Home },
-  { to: '/treinos', label: 'Treino', icon: Dumbbell, gestorHidden: true },
-  { to: '/dieta', label: 'Dieta', icon: Apple, vipOnly: true, gestorHidden: true },
+  { to: '/treinos', label: 'Treino', icon: BarraOlimpicaIcon, gestorHidden: true },
+  { to: '/dieta', label: 'Dieta', icon: TalherFolhaIcon, vipOnly: true, gestorHidden: true },
   { to: '/progresso', label: 'Progresso', icon: BarChart3, gestorHidden: true },
   { to: '/alunos', label: 'Alunos', icon: Users, gestorOnly: true },
   { to: '/relatorios', label: 'Relatórios', icon: FileText, gestorOnly: true },
@@ -40,13 +41,9 @@ function filterByPlan(items: typeof allLinks, isVIP: boolean, isAdmin: boolean, 
 
 export function BrandMark() {
   return (
-    <div className="flex items-center gap-[11px] px-1.5 pb-5 pt-0.5 border-b border-line">
-      <div className="w-[38px] h-[38px] flex-none bg-gradient-to-br from-accent-light to-plate flex items-center justify-center shadow-[inset_0_1px_0_rgba(255,255,255,0.4)] clip-bevel-sm">
-        <Dumbbell size={18} strokeWidth={2.5} className="text-[#170B04]" />
-      </div>
-      <div>
-        <h1 className="font-display text-[15px] tracking-[0.02em] text-bone leading-tight">FITNESSAPP</h1>
-        <p className="text-[11px] text-muted-steel leading-tight">Treinos &amp; Dieta</p>
+    <div className="flex items-center px-1.5 pb-5 pt-1 border-b border-line">
+      <div className="text-center w-full">
+        <LogoWordmark size="md" />
       </div>
     </div>
   );
@@ -171,7 +168,7 @@ export default function Sidebar({ mobileOpen = false, onMobileClose, isVIP = fal
               className="absolute left-0 top-0 bottom-0 w-[280px] bg-gradient-to-b from-[#141416] to-[#0D0D0E] border-r border-line flex flex-col z-50 animate-in slide-in-from-left duration-200"
               onClick={e => e.stopPropagation()}
             >
-              <div className="flex flex-col h-full overflow-y-auto px-4 pt-[22px]">
+              <div className="flex flex-col h-full overflow-y-auto px-4 pt-[max(22px,env(safe-area-inset-top))]">
                 <div className="relative">
                   <BrandMark />
                   <button onClick={onMobileClose} className="absolute right-0 top-0 p-2 text-muted-steel hover:text-bone transition-colors" aria-label="Fechar menu">

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Dumbbell, Apple, Plus, Pencil, History, Loader2,
-  AlertCircle, X, Check, Inbox, Lock,
+  AlertCircle, X, Check, Inbox, Lock, Eye,
 } from 'lucide-react';
 import { fichas } from '../../services/api';
 import { useAlunoContext } from './AlunoLayout';
@@ -29,6 +29,10 @@ export default function ProntuarioAluno() {
   const [modalTipo, setModalTipo] = useState<FichaTipo | null>(null);
   const [novoNome, setNovoNome] = useState('');
   const [saving, setSaving] = useState(false);
+
+  // Modal de visualização de ficha arquivada
+  const [fichaVisualizando, setFichaVisualizando] = useState<FichaCompleta | null>(null);
+  const [loadingVisualizar, setLoadingVisualizar] = useState(false);
 
   const alunoId = aluno?.id;
 
@@ -77,6 +81,18 @@ export default function ProntuarioAluno() {
       setError(e instanceof Error ? e.message : 'Erro ao criar ficha.');
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function handleVisualizarFicha(ficha: FichaTreino) {
+    setLoadingVisualizar(true);
+    try {
+      const completa = await fichas.getByIdComConteudo(ficha.id);
+      setFichaVisualizando(completa);
+    } catch {
+      setError('Erro ao carregar conteúdo da ficha.');
+    } finally {
+      setLoadingVisualizar(false);
     }
   }
 
@@ -164,7 +180,8 @@ export default function ProntuarioAluno() {
                           <th className="text-left py-3 px-4 md:px-5 font-medium uppercase text-[10px] tracking-[0.1em]">Ficha</th>
                           <th className="text-left py-3 px-4 md:px-5 font-medium uppercase text-[10px] tracking-[0.1em]">Tipo</th>
                           <th className="text-left py-3 px-4 md:px-5 font-medium uppercase text-[10px] tracking-[0.1em]">Criada em</th>
-                          <th className="text-right py-3 px-4 md:px-5 font-medium uppercase text-[10px] tracking-[0.1em]">Status</th>
+                          <th className="text-left py-3 px-4 md:px-5 font-medium uppercase text-[10px] tracking-[0.1em]">Status</th>
+                          <th className="text-right py-3 px-4 md:px-5 font-medium uppercase text-[10px] tracking-[0.1em]">Ação</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -182,10 +199,20 @@ export default function ProntuarioAluno() {
                               </span>
                             </td>
                             <td className="py-3 px-4 md:px-5 text-muted-steel">{formatarData(f.data_criacao)}</td>
-                            <td className="py-3 px-4 md:px-5 text-right">
+                            <td className="py-3 px-4 md:px-5">
                               <span className="text-[10px] font-bold uppercase tracking-[0.06em] px-2 py-0.5 bg-panel-2 text-muted-steel border border-line clip-bevel-sm">
                                 Arquivada
                               </span>
+                            </td>
+                            <td className="py-3 px-4 md:px-5 text-right">
+                              <button
+                                onClick={() => handleVisualizarFicha(f)}
+                                disabled={loadingVisualizar}
+                                className="inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.06em] px-2.5 py-1 border border-accent/30 bg-accent/10 text-accent-light clip-bevel-sm hover:bg-accent/20 transition-colors disabled:opacity-50"
+                              >
+                                {loadingVisualizar ? <Loader2 size={10} className="animate-spin" /> : <Eye size={10} />}
+                                Visualizar
+                              </button>
                             </td>
                           </tr>
                         ))}
@@ -254,6 +281,14 @@ export default function ProntuarioAluno() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Modal: visualizar ficha arquivada */}
+      {fichaVisualizando && (
+        <FichaArquivadaModal
+          ficha={fichaVisualizando}
+          onClose={() => setFichaVisualizando(null)}
+        />
       )}
 
     </div>
@@ -347,6 +382,122 @@ function FichaAtivaCard({ tipo, ficha, onAcessar, onCriar, bloqueado = false }: 
           )}
         </>
       )}
+    </div>
+  );
+}
+
+// =============================================================
+// MODAL DE VISUALIZAÇÃO DE FICHA ARQUIVADA (somente leitura)
+// =============================================================
+
+function FichaArquivadaModal({ ficha, onClose }: {
+  ficha: FichaCompleta;
+  onClose: () => void;
+}) {
+  const isTreino = ficha.tipo === 'treino';
+  const Icon = isTreino ? Dumbbell : Apple;
+  const label = isTreino ? 'Treino' : 'Dieta';
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4"
+      onClick={onClose}
+    >
+      <div
+        className="bg-panel border border-line clip-bevel p-5 md:p-6 max-w-2xl w-full space-y-4 shadow-2xl max-h-[90vh] flex flex-col"
+        onClick={e => e.stopPropagation()}
+      >
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex items-start gap-3 min-w-0">
+            <div className={`w-10 h-10 clip-bevel-sm flex items-center justify-center border shrink-0 ${
+              isTreino ? 'bg-accent/10 border-accent/30' : 'bg-sky-500/10 border-sky-500/30'
+            }`}>
+              <Icon size={18} className={isTreino ? 'text-accent-light' : 'text-sky-400'} />
+            </div>
+            <div className="min-w-0">
+              <p className="font-display text-[12.5px] tracking-[0.12em] uppercase text-bone">
+                Ficha de {label} Arquivada
+              </p>
+              <h3 className="text-base font-bold text-zinc-100 truncate mt-0.5">{ficha.nome}</h3>
+              <p className="text-[11px] text-muted-steel mt-0.5">
+                Criada em {formatarData(ficha.data_criacao)}
+                {isTreino
+                  ? ` · ${ficha.treinos.length} treino(s) · ${ficha.treinos.reduce((s, t) => s + (t.exercicios?.length ?? 0), 0)} exercício(s)`
+                  : ` · ${ficha.refeicoes?.length ?? 0} refeição(ões)`}
+              </p>
+            </div>
+          </div>
+          <button onClick={onClose} className="text-muted-steel hover:text-bone transition-colors shrink-0" aria-label="Fechar">
+            <X size={18} />
+          </button>
+        </div>
+
+        <div className="overflow-y-auto pr-1 space-y-3 flex-1">
+          {isTreino ? (
+            ficha.treinos.length === 0 ? (
+              <p className="text-sm text-zinc-400 text-center py-6">Nenhum treino registrado nesta ficha.</p>
+            ) : (
+              ficha.treinos.map(t => (
+                <div key={t.id} className="bg-panel-2/40 border border-line clip-bevel-sm p-4">
+                  <div className="flex items-center justify-between gap-3 mb-2">
+                    <p className="text-sm font-bold text-bone">
+                      <span className="text-accent-light mr-1.5">●</span>
+                      {t.letra_ou_nome || `Treino ${t.created_at}`}
+                    </p>
+                    <span className="text-[10px] uppercase tracking-[0.06em] text-muted-steel font-semibold">{t.exercicios.length} ex</span>
+                  </div>
+                  {t.observacoes?.trim() && (
+                    <p className="text-[11px] text-muted-steel mb-2 whitespace-pre-wrap break-words">
+                      <span className="text-accent-light font-semibold">Obs:</span> {t.observacoes}
+                    </p>
+                  )}
+                  <div className="space-y-1">
+                    {t.exercicios.length === 0 ? (
+                      <p className="text-[11px] text-zinc-500">Sem exercícios.</p>
+                    ) : (
+                      t.exercicios.map((ex, idx) => (
+                        <div key={ex.id} className="flex items-center gap-3 text-[12px] py-1 border-b border-line/40 last:border-0">
+                          <span className="text-[10px] text-zinc-600 font-mono w-4 shrink-0">{idx + 1}</span>
+                          <span className="text-zinc-200 font-medium min-w-0 flex-1 truncate">{ex.nome_exercicio}</span>
+                          {ex.categoria === 'cardio' ? (
+                            <span className="text-[10px] bg-sky-500/10 text-sky-400 border border-sky-500/30 px-1.5 py-0.5 rounded-full shrink-0">
+                              {ex.meta_tempo_min ? `${ex.meta_tempo_min} min` : ex.meta_distancia_km ? `${ex.meta_distancia_km} km` : 'Cardio'}
+                            </span>
+                          ) : (
+                            <span className="text-[11px] text-muted-steel shrink-0">
+                              {ex.series}s × {ex.repeticoes_prescritas || '—'} · {ex.descanso}s
+                            </span>
+                          )}
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+              ))
+            )
+          ) : (
+            (ficha.refeicoes?.length ?? 0) === 0 ? (
+              <p className="text-sm text-zinc-400 text-center py-6">Nenhuma refeição registrada nesta ficha.</p>
+            ) : (
+              ficha.refeicoes!.map(r => (
+                <div key={r.id} className="bg-panel-2/40 border border-line clip-bevel-sm p-4">
+                  <div className="flex items-center justify-between gap-3 mb-1">
+                    <p className="text-sm font-bold text-bone">{r.nome_refeicao}</p>
+                    {r.horario && <span className="text-[11px] text-muted-steel">{r.horario}</span>}
+                  </div>
+                  <p className="text-[12.5px] text-zinc-300 whitespace-pre-wrap break-words">{r.descricao_alimentos}</p>
+                </div>
+              ))
+            )
+          )}
+        </div>
+
+        <div className="flex justify-end pt-1">
+          <button onClick={onClose} className="btn-steel">
+            Fechar
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

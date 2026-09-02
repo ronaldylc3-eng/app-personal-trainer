@@ -1,5 +1,6 @@
 import { supabase } from '../lib/supabase';
 import { aplicarPolitica, limparPolitica } from '../lib/authSession';
+import { withCache, cacheDeletePrefix, cacheClear } from '../lib/apiCache';
 import type {
   Usuario,
   FichaTreino, FichaCompleta, TreinoFicha, TreinoComExercicios,
@@ -7,6 +8,7 @@ import type {
   MuscleGroupGoal, Activity, Meal, FixedFood,
   AvaliacaoFisicaRecord,
   FichaTipo,
+  Periodizacao, PeriodizacaoComTreinos,
   AvaliacaoOs, AvaliacaoOsInput,
   AcompanhamentoOs, AcompanhamentoOsInput,
   EventoClinico,
@@ -68,17 +70,13 @@ export const auth = {
 
   checkEmailExists: async (email: string): Promise<boolean> => {
     const cleanEmail = email.trim().toLowerCase();
-    const { data, error } = await supabase
-      .from('usuarios')
-      .select('id')
-      .ilike('email', cleanEmail)
-      .limit(1);
+    const { data, error } = await supabase.rpc('check_email_exists', { email_input: cleanEmail });
 
     if (error) {
       console.warn('[auth.checkEmailExists] Erro ao consultar email:', error.message);
       return true;
     }
-    return !!(data && data.length > 0);
+    return !!data;
   },
 
   resetPassword: async (email: string) => {
@@ -92,6 +90,7 @@ export const auth = {
 
   signOut: async () => {
     limparPolitica();
+    cacheClear();
     return supabase.auth.signOut();
   },
 
@@ -145,22 +144,26 @@ export const usuarios = {
   },
 
   getClientes: async (q?: string): Promise<Usuario[]> => {
-    let query = supabase
-      .from('usuarios')
-      .select('*')
-      .eq('role', 'aluno')
-      .order('created_at', { ascending: false });
+    const chave = `clientes:${(q || '').trim()}`;
+    return withCache(chave, async () => {
+      let query = supabase
+        .from('usuarios')
+        .select('*')
+        .eq('role', 'aluno')
+        .order('created_at', { ascending: false });
 
-    if (q && q.trim()) {
-      query = query.or(`nome.ilike.%${q}%,email.ilike.%${q}%`);
-    }
+      if (q && q.trim()) {
+        query = query.or(`nome.ilike.%${q}%,email.ilike.%${q}%`);
+      }
 
-    const { data, error } = await query;
-    if (error) return [];
-    return data as Usuario[];
+      const { data, error } = await query;
+      if (error) return [];
+      return data as Usuario[];
+    });
   },
 
   update: async (id: string, updates: Partial<Usuario>): Promise<Usuario | null> => {
+    cacheDeletePrefix('clientes:');
     const { data, error } = await supabase
       .from('usuarios')
       .update(updates)
@@ -175,6 +178,7 @@ export const usuarios = {
     userId: string,
     dados: { nome?: string; telefone?: string; cpf?: string; pacote?: 'Premium' | 'VIP'; genero?: 'masculino' | 'feminino' }
   ): Promise<Usuario> => {
+    cacheDeletePrefix('clientes:');
     const payload: Record<string, any> = {};
     if (dados.nome !== undefined) payload.nome = dados.nome.trim();
     if (dados.telefone !== undefined) payload.telefone = dados.telefone.replace(/\D/g, '');
@@ -194,6 +198,7 @@ export const usuarios = {
   },
 
   delete: async (id: string): Promise<void> => {
+    cacheDeletePrefix('clientes:');
     const { error } = await supabase
       .from('usuarios')
       .delete()
@@ -201,11 +206,29 @@ export const usuarios = {
     if (error) throw error;
   },
 
-  inviteAluno: async (data: { email: string; nome: string; telefone?: string; cpf?: string; pacote?: 'Premium' | 'VIP'; genero?: 'masculino' | 'feminino'; frontendUrl?: string }) => {
-    const { data: { session } } = await supabase.auth.getSession();
-    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+  renovarPlano: async (userId: string): Promise<Usuario> => {
+    cacheDeletePrefix('clientes:');
+    const { data, error } = await supabase.rpc('renovar_plano', { p_user_id: userId });
+    if (error) throw error;
+    const row = (Array.isArray(data) ? data[0] : data) as Usuario;
+    if (!row) throw new Error('Aluno não encontrado');
+    return row;
+  },
 
-    if (supabaseUrl && session?.access_token) {
+  inviteAluno: async (data: { email: string; nome: string; telefone?: string; cpf?: string; pacote?: 'Premium' | 'VIP'; genero?: 'masculino' | 'feminino'; frontendUrl?: string }) => {
+    const { data: { user }, error: userError } = await supabase.auth.getUser();
+    if (userError || !user) {
+      throw new Error('Sessão expirada. Faça login novamente como gestor.');
+    }
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.access_token) {
+      throw new Error('Sessão expirada. Faça login novamente como gestor.');
+    }
+
+    const supabaseUrl =
+      import.meta.env.VITE_SUPABASE_URL || 'https://brwsxmmcvozyqavueyrh.supabase.co';
+
+    try {
       const res = await fetch(`${supabaseUrl}/functions/v1/invite-aluno`, {
         method: 'POST',
         headers: {
@@ -225,34 +248,81 @@ export const usuarios = {
       });
 
       if (res.ok) {
+        cacheDeletePrefix('clientes:');
         return res.json();
       }
+
+      let mensagem = `Falha ao convidar o aluno (HTTP ${res.status}).`;
+      try {
+        const corpo = await res.json();
+        if (corpo?.error) mensagem = corpo.error;
+      } catch {
+        // corpo não-JSON; mantém a mensagem genérica
+      }
+      const erroHttp = new Error(mensagem);
+      (erroHttp as { isHttp?: boolean }).isHttp = true;
+      throw erroHttp;
+    } catch (e) {
+      if (e instanceof Error && !(e as { isHttp?: boolean }).isHttp) {
+        throw new Error('Não foi possível acessar a edge function de convite. Verifique a conexão ou se a function está publicada.');
+      }
+      throw e;
     }
-
-    // Fallback direct insert if function is unavailable
-    const { data: inserted, error } = await supabase
-      .from('usuarios')
-      .insert({
-        nome: data.nome.trim(),
-        email: data.email.trim().toLowerCase(),
-        telefone: data.telefone?.replace(/\D/g, '') || '',
-        cpf: data.cpf?.replace(/\D/g, '') || '',
-        pacote: data.pacote || 'Premium',
-        genero: data.genero || null,
-        role: 'aluno',
-        status: 'pendente',
-      })
-      .select()
-      .single();
-
-    if (error) throw error;
-    return inserted;
   },
 };
 
 // =============================================================
 // FICHAS
 // =============================================================
+
+// Helper: monta FichaCompleta a partir da resposta bruta do Supabase,
+// incluindo periodizações agrupadas e o alias `treinos` (compat: todos
+// os treinos, independente da periodização, para o front do aluno).
+function montarFichaCompleta(raw: any): FichaCompleta {
+  const sorter = (a: any, b: any) => Number(new Date(a.created_at)) - Number(new Date(b.created_at));
+
+  const mapearTreino = (t: any): TreinoComExercicios => ({
+    ...t,
+    exercicios: ((t.exercicios_treino || []) as ExercicioTreino[])
+      .slice()
+      .sort((a: any, b: any) => (a.ordem ?? 0) - (b.ordem ?? 0)),
+  });
+
+  const todosTreinos: TreinoComExercicios[] = (raw.treinos_ficha || [])
+    .slice()
+    .sort(sorter)
+    .map(mapearTreino);
+
+  const periodizacoes: PeriodizacaoComTreinos[] = (raw.periodizacoes || [])
+    .slice()
+    .sort(sorter)
+    .map((p: any) => ({
+      id: p.id,
+      ficha_id: p.ficha_id,
+      nome: p.nome,
+      created_at: p.created_at,
+      treinos: (p.treinos_ficha || [])
+        .slice()
+        .sort(sorter)
+        .map(mapearTreino),
+    }));
+
+  const refeicoes = ((raw.refeicoes_dieta || []) as RefeicaoDieta[])
+    .slice()
+    .sort((a: any, b: any) => (a.ordem ?? 0) - (b.ordem ?? 0));
+
+  return {
+    id: raw.id,
+    user_id: raw.user_id,
+    nome: raw.nome,
+    tipo: raw.tipo,
+    status: raw.status,
+    data_criacao: raw.data_criacao,
+    treinos: todosTreinos,
+    refeicoes,
+    periodizacoes,
+  };
+}
 
 export const fichas = {
   getByCliente: async (userId: string): Promise<FichaTreino[]> => {
@@ -266,56 +336,34 @@ export const fichas = {
   },
 
   getAtiva: async (userId: string, tipo: FichaTipo): Promise<FichaCompleta | null> => {
-    const { data: fichasData, error: fichaError } = await supabase
-      .from('fichas')
-      .select('*')
-      .eq('user_id', userId)
-      .eq('tipo', tipo)
-      .eq('status', 'ativa')
-      .order('data_criacao', { ascending: false })
-      .limit(1);
+    const chave = `fichaAtiva:${userId}:${tipo}`;
+    return withCache(chave, async () => {
+      const { data: fichasData, error: fichaError } = await supabase
+        .from('fichas')
+        .select(`
+          *,
+          treinos_ficha(
+            *,
+            exercicios_treino(*)
+          ),
+          periodizacoes(
+            *,
+            treinos_ficha(
+              *,
+              exercicios_treino(*)
+            )
+          ),
+          refeicoes_dieta(*)
+        `)
+        .eq('user_id', userId)
+        .eq('tipo', tipo)
+        .eq('status', 'ativa')
+        .order('data_criacao', { ascending: false })
+        .limit(1);
 
-    if (fichaError || !fichasData || fichasData.length === 0) return null;
-    const fichaBase = fichasData[0] as FichaTreino;
-
-    const { data: treinosData } = await supabase
-      .from('treinos_ficha')
-      .select('*')
-      .eq('ficha_id', fichaBase.id)
-      .order('created_at', { ascending: true });
-
-    const treinos = (treinosData || []) as TreinoFicha[];
-
-    const treinosComExercicios: TreinoComExercicios[] = await Promise.all(
-      treinos.map(async (t) => {
-        const { data: exData } = await supabase
-          .from('exercicios_treino')
-          .select('*')
-          .eq('treino_id', t.id)
-          .order('ordem', { ascending: true });
-        return {
-          ...t,
-          exercicios: (exData || []) as ExercicioTreino[],
-        };
-      })
-    );
-
-    let refeicoes: RefeicaoDieta[] = [];
-    if (tipo === 'dieta') {
-      const { data: refData } = await supabase
-        .from('refeicoes_dieta')
-        .select('*')
-        .eq('ficha_id', fichaBase.id)
-        .order('ordem', { ascending: true })
-        .order('created_at', { ascending: true });
-      refeicoes = (refData || []) as RefeicaoDieta[];
-    }
-
-    return {
-      ...fichaBase,
-      treinos: treinosComExercicios,
-      refeicoes,
-    };
+      if (fichaError || !fichasData || fichasData.length === 0) return null;
+      return montarFichaCompleta(fichasData[0] as any);
+    });
   },
 
   getHistorico: async (userId: string): Promise<FichaTreino[]> => {
@@ -329,30 +377,44 @@ export const fichas = {
     return data as FichaTreino[];
   },
 
-  create: async (userId: string, nome: string, tipo: FichaTipo = 'treino'): Promise<FichaTreino> => {
-    await supabase
-      .from('fichas')
-      .update({ status: 'arquivada' })
-      .eq('user_id', userId)
-      .eq('tipo', tipo)
-      .eq('status', 'ativa');
-
+  getByIdComConteudo: async (id: string): Promise<FichaCompleta | null> => {
     const { data, error } = await supabase
       .from('fichas')
-      .insert({
-        user_id: userId,
-        nome: nome.trim(),
-        tipo,
-        status: 'ativa',
-      })
-      .select()
+      .select(`
+        *,
+        treinos_ficha(
+          *,
+          exercicios_treino(*)
+        ),
+        periodizacoes(
+          *,
+          treinos_ficha(
+            *,
+            exercicios_treino(*)
+          )
+        ),
+        refeicoes_dieta(*)
+      `)
+      .eq('id', id)
       .single();
+    if (error || !data) return null;
+    return montarFichaCompleta(data as any);
+  },
+
+  create: async (userId: string, nome: string, tipo: FichaTipo = 'treino'): Promise<FichaTreino> => {
+    cacheDeletePrefix('fichaAtiva:');
+    const { data, error } = await supabase.rpc('criar_ficha', {
+      p_user_id: userId,
+      p_nome: nome.trim(),
+      p_tipo: tipo,
+    });
 
     if (error) throw error;
     return data as FichaTreino;
   },
 
   update: async (id: string, updates: Partial<Pick<FichaTreino, 'nome' | 'status'>>): Promise<FichaTreino> => {
+    cacheDeletePrefix('fichaAtiva:');
     const { data, error } = await supabase
       .from('fichas')
       .update(updates)
@@ -364,6 +426,7 @@ export const fichas = {
   },
 
   delete: async (id: string): Promise<void> => {
+    cacheDeletePrefix('fichaAtiva:');
     const { error } = await supabase
       .from('fichas')
       .delete()
@@ -372,107 +435,83 @@ export const fichas = {
   },
 
   criarAvaliacao: async (userId: string, dados: AvaliacaoOsInput): Promise<AvaliacaoOs> => {
-    const { data: ficha, error: fichaError } = await supabase
-      .from('fichas')
-      .insert({
-        user_id: userId,
-        nome: dados.nome || 'Avaliação Física',
-        tipo: 'avaliacao',
-        status: 'arquivada',
-      })
-      .select()
-      .single();
+    const { data, error } = await supabase.rpc('criar_avaliacao_os', {
+      p_user_id: userId,
+      p_dados: {
+        nome: dados.nome,
+        anamnese: dados.anamnese,
+        perimetros: dados.perimetros,
+        composicao: dados.composicao,
+        flexibilidade_forca: dados.flexibilidade_forca,
+        objetivo: dados.objetivo,
+        peso: dados.peso,
+        altura: dados.altura,
+      },
+    });
 
-    if (fichaError) throw fichaError;
-
-    const { data: os, error: osError } = await supabase
-      .from('avaliacoes_os')
-      .insert({
-        ficha_id: ficha.id,
-        anamnese: dados.anamnese || '',
-        perimetros: dados.perimetros || {},
-        composicao: dados.composicao || { percentual_gordura: 0, massa_magra: 0, massa_gordura: 0 },
-        flexibilidade_forca: dados.flexibilidade_forca || '',
-        objetivo: dados.objetivo || '',
-        peso: dados.peso || 0,
-        altura: dados.altura || 0,
-      })
-      .select()
-      .single();
-
-    if (osError) throw osError;
-    return os as AvaliacaoOs;
+    if (error) throw error;
+    return data as AvaliacaoOs;
   },
 
   criarAcompanhamento: async (userId: string, dados: AcompanhamentoOsInput): Promise<AcompanhamentoOs> => {
-    const { data: ficha, error: fichaError } = await supabase
-      .from('fichas')
-      .insert({
-        user_id: userId,
-        nome: dados.nome || 'Acompanhamento',
-        tipo: 'acompanhamento',
-        status: 'arquivada',
-      })
-      .select()
-      .single();
+    cacheDeletePrefix('metas:');
+    const { data, error } = await supabase.rpc('criar_acompanhamento_os', {
+      p_user_id: userId,
+      p_dados: {
+        nome: dados.nome,
+        relato: dados.relato,
+        feedback: dados.feedback,
+        fotos: dados.fotos,
+        peso: dados.peso ?? '',
+        meta_kcal: dados.meta_kcal ?? '',
+        meta_proteina: dados.meta_proteina ?? '',
+        meta_carbo: dados.meta_carbo ?? '',
+        meta_gordura: dados.meta_gordura ?? '',
+        meta_fibra: dados.meta_fibra ?? '',
+      },
+    });
 
-    if (fichaError) throw fichaError;
-
-    const { data: os, error: osError } = await supabase
-      .from('acompanhamentos_os')
-      .insert({
-        ficha_id: ficha.id,
-        relato: dados.relato || '',
-        feedback: dados.feedback || '',
-        fotos: dados.fotos || [],
-        peso: dados.peso ?? null,
-        meta_kcal: dados.meta_kcal ?? null,
-        meta_proteina: dados.meta_proteina ?? null,
-        meta_carbo: dados.meta_carbo ?? null,
-        meta_gordura: dados.meta_gordura ?? null,
-        meta_fibra: dados.meta_fibra ?? null,
-      })
-      .select()
-      .single();
-
-    if (osError) throw osError;
-    return os as AcompanhamentoOs;
+    if (error) throw error;
+    return data as AcompanhamentoOs;
   },
 
   getUltimasMetasNutricionais: async (userId: string): Promise<MetasNutricionais> => {
-    const { data, error } = await supabase
-      .from('acompanhamentos_os')
-      .select(`
-        meta_kcal,
-        meta_proteina,
-        meta_carbo,
-        meta_gordura,
-        meta_fibra,
-        fichas!inner(user_id, tipo)
-      `)
-      .eq('fichas.user_id', userId)
-      .eq('fichas.tipo', 'acompanhamento')
-      .order('created_at', { ascending: false })
-      .limit(1);
+    const chave = `metas:${userId}`;
+    return withCache(chave, async () => {
+      const { data, error } = await supabase
+        .from('acompanhamentos_os')
+        .select(`
+          meta_kcal,
+          meta_proteina,
+          meta_carbo,
+          meta_gordura,
+          meta_fibra,
+          fichas!inner(user_id, tipo)
+        `)
+        .eq('fichas.user_id', userId)
+        .eq('fichas.tipo', 'acompanhamento')
+        .order('created_at', { ascending: false })
+        .limit(1);
 
-    if (error || !data || data.length === 0) return null;
-    const m = data[0] as any;
-    const todasVazias =
-      m.meta_kcal == null &&
-      m.meta_proteina == null &&
-      m.meta_carbo == null &&
-      m.meta_gordura == null &&
-      m.meta_fibra == null;
+      if (error || !data || data.length === 0) return null;
+      const m = data[0] as any;
+      const todasVazias =
+        m.meta_kcal == null &&
+        m.meta_proteina == null &&
+        m.meta_carbo == null &&
+        m.meta_gordura == null &&
+        m.meta_fibra == null;
 
-    if (todasVazias) return null;
+      if (todasVazias) return null;
 
-    return {
-      meta_kcal: m.meta_kcal ?? 0,
-      meta_proteina: m.meta_proteina ?? 0,
-      meta_carbo: m.meta_carbo ?? 0,
-      meta_gordura: m.meta_gordura ?? 0,
-      meta_fibra: m.meta_fibra ?? 0,
-    };
+      return {
+        meta_kcal: m.meta_kcal ?? 0,
+        meta_proteina: m.meta_proteina ?? 0,
+        meta_carbo: m.meta_carbo ?? 0,
+        meta_gordura: m.meta_gordura ?? 0,
+        meta_fibra: m.meta_fibra ?? 0,
+      };
+    });
   },
 
   getEventos: async (userId: string): Promise<EventoClinico[]> => {
@@ -531,6 +570,7 @@ export const refeicoesDieta = {
   },
 
   create: async (fichaId: string, dados: RefeicaoDietaInput): Promise<RefeicaoDieta> => {
+    cacheDeletePrefix('fichaAtiva:');
     const { data, error } = await supabase
       .from('refeicoes_dieta')
       .insert({
@@ -547,6 +587,7 @@ export const refeicoesDieta = {
   },
 
   update: async (id: string, dados: RefeicaoDietaInput): Promise<RefeicaoDieta> => {
+    cacheDeletePrefix('fichaAtiva:');
     const { data, error } = await supabase
       .from('refeicoes_dieta')
       .update(dados)
@@ -558,6 +599,7 @@ export const refeicoesDieta = {
   },
 
   delete: async (id: string): Promise<void> => {
+    cacheDeletePrefix('fichaAtiva:');
     const { error } = await supabase
       .from('refeicoes_dieta')
       .delete()
@@ -580,30 +622,39 @@ export const treinosFicha = {
 
     if (error || !treinos) return [];
 
-    const result: TreinoComExercicios[] = await Promise.all(
-      (treinos as TreinoFicha[]).map(async (t) => {
-        const { data: exs } = await supabase
-          .from('exercicios_treino')
-          .select('*')
-          .eq('treino_id', t.id)
-          .order('ordem', { ascending: true });
-        return {
-          ...t,
-          exercicios: (exs || []) as ExercicioTreino[],
-        };
-      })
-    );
+    const treinoIds = (treinos as TreinoFicha[]).map(t => t.id);
 
-    return result;
+    let exercicios: ExercicioTreino[] = [];
+    if (treinoIds.length > 0) {
+      const { data: exs, error: exError } = await supabase
+        .from('exercicios_treino')
+        .select('*')
+        .in('treino_id', treinoIds);
+      if (!exError) exercicios = (exs || []) as ExercicioTreino[];
+    }
+
+    const exsPorTreino = new Map<string, ExercicioTreino[]>();
+    for (const ex of exercicios) {
+      const grupo = exsPorTreino.get(ex.treino_id) || [];
+      grupo.push(ex);
+      exsPorTreino.set(ex.treino_id, grupo);
+    }
+
+    return (treinos as TreinoFicha[]).map(t => ({
+      ...t,
+      exercicios: exsPorTreino.get(t.id) || [],
+    }));
   },
 
-  create: async (fichaId: string, letraOuNome: string, observacoes?: string): Promise<TreinoFicha> => {
+  create: async (fichaId: string, letraOuNome: string, observacoes?: string, periodizacaoId?: string): Promise<TreinoFicha> => {
+    cacheDeletePrefix('fichaAtiva:');
     const { data, error } = await supabase
       .from('treinos_ficha')
       .insert({
         ficha_id: fichaId,
         letra_ou_nome: letraOuNome,
         observacoes: observacoes?.trim() || null,
+        periodizacao_id: periodizacaoId || null,
       })
       .select()
       .single();
@@ -611,7 +662,96 @@ export const treinosFicha = {
     return data as TreinoFicha;
   },
 
+  // DEEP COPY de um treino para outra periodizacao: cria um novo registro
+  // em treinos_ficha + copia todos os exercicios (exercicios_treino), evitando
+  // recadastro manual. Se o nome ja existir na periodizacao alvo, aplica
+  // sufixo " (copia)" (atencao: a origem da copia nao e alterada).
+  duplicar: async (treinoId: string, periodizacaoAlvoId: string): Promise<TreinoComExercicios> => {
+    cacheDeletePrefix('fichaAtiva:');
+
+    const { data: origem, error: erroOrigem } = await supabase
+      .from('treinos_ficha')
+      .select(`
+        *,
+        exercicios_treino(*)
+      `)
+      .eq('id', treinoId)
+      .single();
+    if (erroOrigem || !origem) throw new Error('Treino de origem não encontrado.');
+
+    const base = origem as any;
+    const nomeBase = String(base.letra_ou_nome || 'Treino').trim();
+
+    const { data: existentes, error: erroExistentes } = await supabase
+      .from('treinos_ficha')
+      .select('letra_ou_nome')
+      .eq('periodizacao_id', periodizacaoAlvoId);
+    if (erroExistentes) throw erroExistentes;
+
+    const nomesExistentes = new Set((existentes || []).map((t: any) => String(t.letra_ou_nome).trim().toLowerCase()));
+    let nomeFinal = nomeBase;
+    if (nomesExistentes.has(nomeFinal.toLowerCase())) {
+      let contador = 1;
+      let candidato = `${nomeBase} (copia)`;
+      while (nomesExistentes.has(candidato.toLowerCase())) {
+        contador += 1;
+        candidato = `${nomeBase} (copia ${contador})`;
+      }
+      nomeFinal = candidato;
+    }
+
+    const { data: criado, error: erroCriado } = await supabase
+      .from('treinos_ficha')
+      .insert({
+        ficha_id: base.ficha_id,
+        letra_ou_nome: nomeFinal,
+        observacoes: base.observacoes ?? null,
+        periodizacao_id: periodizacaoAlvoId,
+      })
+      .select()
+      .single();
+    if (erroCriado || !criado) throw erroCriado || new Error('Não foi possível duplicar o treino.');
+
+    const novoId = (criado as TreinoFicha).id;
+
+    const exerciciosOrigem = ((base.exercicios_treino || []) as ExercicioTreino[])
+      .slice()
+      .sort((a: any, b: any) => (a.ordem ?? 0) - (b.ordem ?? 0));
+
+    if (exerciciosOrigem.length > 0) {
+      const rows = exerciciosOrigem.map((ex, idx) => ({
+        treino_id: novoId,
+        nome_exercicio: ex.nome_exercicio,
+        grupo_muscular: ex.grupo_muscular || null,
+        musculo_principal: ex.musculo_principal || null,
+        series: ex.series || 3,
+        repeticoes_prescritas: ex.repeticoes_prescritas || null,
+        repeticoes_por_serie: ex.repeticoes_por_serie || null,
+        series_aquecimento: ex.series_aquecimento || null,
+        descanso: ex.descanso || 60,
+        ordem: idx,
+        categoria: ex.categoria || 'forca',
+        meta_tempo_min: ex.meta_tempo_min ?? null,
+        meta_distancia_km: ex.meta_distancia_km ?? null,
+      }));
+
+      const { data: novos, error: erroEx } = await supabase
+        .from('exercicios_treino')
+        .insert(rows)
+        .select();
+      if (erroEx) throw erroEx;
+
+      return {
+        ...(criado as TreinoFicha),
+        exercicios: ((novos || []) as ExercicioTreino[]).sort((a, b) => (a.ordem ?? 0) - (b.ordem ?? 0)),
+      };
+    }
+
+    return { ...(criado as TreinoFicha), exercicios: [] };
+  },
+
   update: async (id: string, updates: { letra_ou_nome?: string; observacoes?: string }): Promise<TreinoFicha> => {
+    cacheDeletePrefix('fichaAtiva:');
     const payload: Record<string, any> = {};
     if (updates.letra_ou_nome !== undefined) payload.letra_ou_nome = updates.letra_ou_nome;
     if (updates.observacoes !== undefined) payload.observacoes = updates.observacoes.trim() || null;
@@ -627,8 +767,72 @@ export const treinosFicha = {
   },
 
   delete: async (id: string): Promise<void> => {
+    cacheDeletePrefix('fichaAtiva:');
     const { error } = await supabase
       .from('treinos_ficha')
+      .delete()
+      .eq('id', id);
+    if (error) throw error;
+  },
+};
+
+// =============================================================
+// PERIODIZACOES (blocos de treinamento dentro da ficha)
+// =============================================================
+
+export const periodizacoes = {
+  getByFicha: async (fichaId: string): Promise<Periodizacao[]> => {
+    const { data, error } = await supabase
+      .from('periodizacoes')
+      .select('*')
+      .eq('ficha_id', fichaId)
+      .order('created_at', { ascending: true });
+    if (error) return [];
+    return (data || []) as Periodizacao[];
+  },
+
+  create: async (fichaId: string, nome: string): Promise<Periodizacao> => {
+    cacheDeletePrefix('fichaAtiva:');
+    const trimNome = nome.trim();
+    if (!trimNome) throw new Error('O nome da periodização não pode ser vazio.');
+
+    const { data: existentes, error: erroExistentes } = await supabase
+      .from('periodizacoes')
+      .select('nome')
+      .eq('ficha_id', fichaId);
+    if (erroExistentes) throw erroExistentes;
+    const duplicado = (existentes || []).some(
+      (p: any) => String(p.nome).trim().toLowerCase() === trimNome.toLowerCase()
+    );
+    if (duplicado) throw new Error(`Já existe uma periodização com o nome "${trimNome}".`);
+
+    const { data, error } = await supabase
+      .from('periodizacoes')
+      .insert({ ficha_id: fichaId, nome: trimNome })
+      .select()
+      .single();
+    if (error) throw error;
+    return data as Periodizacao;
+  },
+
+  update: async (id: string, nome: string): Promise<Periodizacao> => {
+    cacheDeletePrefix('fichaAtiva:');
+    const trimNome = nome.trim();
+    if (!trimNome) throw new Error('O nome da periodização não pode ser vazio.');
+    const { data, error } = await supabase
+      .from('periodizacoes')
+      .update({ nome: trimNome })
+      .eq('id', id)
+      .select()
+      .single();
+    if (error) throw error;
+    return data as Periodizacao;
+  },
+
+  delete: async (id: string): Promise<void> => {
+    cacheDeletePrefix('fichaAtiva:');
+    const { error } = await supabase
+      .from('periodizacoes')
       .delete()
       .eq('id', id);
     if (error) throw error;
@@ -645,6 +849,7 @@ export const exerciciosTreino = {
     items: Omit<ExercicioTreino, 'id' | 'treino_id'>[]
   ): Promise<ExercicioTreino[]> => {
     if (items.length === 0) return [];
+    cacheDeletePrefix('fichaAtiva:');
     const rows = items.map((ex, idx) => ({
       treino_id: treinoId,
       nome_exercicio: ex.nome_exercicio,
@@ -671,6 +876,7 @@ export const exerciciosTreino = {
   },
 
   update: async (id: string, updates: Partial<Omit<ExercicioTreino, 'id' | 'treino_id'>>): Promise<void> => {
+    cacheDeletePrefix('fichaAtiva:');
     const { error } = await supabase
       .from('exercicios_treino')
       .update(updates)
@@ -679,6 +885,7 @@ export const exerciciosTreino = {
   },
 
   delete: async (id: string): Promise<void> => {
+    cacheDeletePrefix('fichaAtiva:');
     const { error } = await supabase
       .from('exercicios_treino')
       .delete()
@@ -694,41 +901,46 @@ export const exerciciosTreino = {
 export const logsExecucao = {
   upsertDia: async (rows: Omit<LogExecucao, 'id' | 'data_registro'>[]): Promise<void> => {
     if (rows.length === 0) return;
+    cacheDeletePrefix('progresso:');
+    cacheDeletePrefix('volume:');
     const { error } = await supabase
       .from('logs_execucao')
-      .upsert(rows, { onConflict: 'exercicio_id,num_serie,data_treino' });
+      .upsert(rows, { onConflict: 'exercicio_id,num_serie,data_treino,log_treino_id' });
     if (error) throw error;
   },
 
   getVolumeTotal: async (userId: string, dias = 30): Promise<number> => {
-    const corte = new Date(Date.now() - (dias - 1) * 24 * 60 * 60 * 1000);
-    const corteISO = `${corte.getFullYear()}-${String(corte.getMonth() + 1).padStart(2, '0')}-${String(corte.getDate()).padStart(2, '0')}`;
+    const chave = `volume:${userId}:${dias}`;
+    return withCache(chave, async () => {
+      const corte = new Date(Date.now() - (dias - 1) * 24 * 60 * 60 * 1000);
+      const corteISO = `${corte.getFullYear()}-${String(corte.getMonth() + 1).padStart(2, '0')}-${String(corte.getDate()).padStart(2, '0')}`;
 
-    const { data, error } = await supabase
-      .from('logs_execucao')
-      .select(`
-        carga,
-        repeticoes_realizadas,
-        serie_valida,
-        is_warmup,
-        exercicios_treino!inner(
-          treinos_ficha!inner(
-            fichas!inner(user_id)
+      const { data, error } = await supabase
+        .from('logs_execucao')
+        .select(`
+          carga,
+          repeticoes_realizadas,
+          serie_valida,
+          is_warmup,
+          exercicios_treino!inner(
+            treinos_ficha!inner(
+              fichas!inner(user_id)
+            )
           )
-        )
-      `)
-      .eq('exercicios_treino.treinos_ficha.fichas.user_id', userId)
-      .gte('data_treino', corteISO)
-      .eq('serie_valida', true)
-      .neq('is_warmup', true);
+        `)
+        .eq('exercicios_treino.treinos_ficha.fichas.user_id', userId)
+        .gte('data_treino', corteISO)
+        .eq('serie_valida', true)
+        .neq('is_warmup', true);
 
-    if (error || !data) return 0;
+      if (error || !data) return 0;
 
-    return data.reduce((sum: number, r: any) => {
-      const carga = Number(r.carga) || 0;
-      const reps = Number(r.repeticoes_realizadas) || 0;
-      return sum + carga * reps;
-    }, 0);
+      return data.reduce((sum: number, r: any) => {
+        const carga = Number(r.carga) || 0;
+        const reps = Number(r.repeticoes_realizadas) || 0;
+        return sum + carga * reps;
+      }, 0);
+    });
   },
 
   getByExercicio: async (exercicioId: string, limitCount = 30): Promise<LogExecucao[]> => {
@@ -743,6 +955,8 @@ export const logsExecucao = {
   },
 
   getProgresso: async (userId: string): Promise<SessaoComProgresso[]> => {
+    const chave = `progresso:${userId}`;
+    return withCache(chave, async () => {
     const { data: sessoes, error: sessError } = await supabase
       .from('logs_treino')
       .select('id, treino_id, data_execucao, duracao_segundos, treinos_ficha(letra_ou_nome)')
@@ -772,7 +986,7 @@ export const logsExecucao = {
         .not('log_treino_id', 'is', null),
       supabase
         .from('logs_cardio')
-        .select('exercicio_id, duracao_min, distancia_km, log_treino_id')
+        .select('exercicio_id, nome_cardio, user_id, duracao_min, distancia_km, log_treino_id')
         .in('log_treino_id', sessaoIds),
     ]);
 
@@ -787,14 +1001,15 @@ export const logsExecucao = {
 
     const picoPorSessao = new Map<string, Map<string, number>>();
     const seriesPorSessao = new Map<string, Map<string, SerieItem[]>>();
-    const cardiosPorSessao = new Map<string, { exercicio_id: string; duracao_min: number; distancia_km?: number | null }[]>();
+    const cardiosPorSessao = new Map<string, { exercicio_id: string | null; nome_cardio?: string | null; duracao_min: number; distancia_km?: number | null }[]>();
 
     if (cardiosData) {
       for (const c of cardiosData) {
         if (!c.log_treino_id) continue;
         const lista = cardiosPorSessao.get(c.log_treino_id) || [];
         lista.push({
-          exercicio_id: c.exercicio_id,
+          exercicio_id: c.exercicio_id ?? null,
+          nome_cardio: c.nome_cardio ?? null,
           duracao_min: Number(c.duracao_min) || 0,
           distancia_km: c.distancia_km ?? null,
         });
@@ -879,6 +1094,7 @@ export const logsExecucao = {
         cardios: cardiosPorSessao.get(s.id) || [],
       };
     });
+    });
   },
 };
 
@@ -889,9 +1105,11 @@ export const logsExecucao = {
 export const logsCardio = {
   upsertDia: async (rows: LogCardioInput[]): Promise<void> => {
     if (rows.length === 0) return;
+    cacheDeletePrefix('progresso:');
+    cacheDeletePrefix('volume:');
     const { error } = await supabase
       .from('logs_cardio')
-      .upsert(rows, { onConflict: 'exercicio_id,data_treino' });
+      .upsert(rows, { onConflict: 'exercicio_id,data_treino,log_treino_id' });
     if (error) throw error;
   },
 
@@ -905,6 +1123,36 @@ export const logsCardio = {
     if (error) return [];
     return (data || []) as LogCardioInput[];
   },
+
+  // Registro avulso de Cardio Isolado Livre (fora da ficha).
+  // Cria a sessão em logs_treino (treino_id NULL) + linha em logs_cardio
+  // (exercicio_id NULL, identificada por user_id + nome_cardio).
+  criarCardioIsolado: async (userId: string, dados: {
+    nomeCardio: string;
+    duracaoMin: number;
+    distanciaKm?: number | null;
+    dataTreino?: string;
+  }): Promise<{ logTreinoId: string }> => {
+    if (!userId) throw new Error('Usuário não informado.');
+    const duracaoMin = Math.max(1, Math.round(dados.duracaoMin) || 0);
+    const nomeCardio = (dados.nomeCardio || 'Cardio').trim();
+
+    const logTreino = await logsTreino.create(userId, null, Math.round(duracaoMin * 60));
+
+    const row: LogCardioInput = {
+      exercicio_id: null,
+      user_id: userId,
+      nome_cardio: nomeCardio,
+      duracao_min: Math.min(duracaoMin, 999.9),
+      distancia_km: dados.distanciaKm && dados.distanciaKm > 0 ? Math.min(dados.distanciaKm, 999.99) : null,
+      data_treino: dados.dataTreino || hojeSP(),
+      log_treino_id: logTreino.id,
+    };
+    const { error } = await supabase.from('logs_cardio').insert(row);
+    if (error) throw error;
+
+    return { logTreinoId: logTreino.id };
+  },
 };
 
 // =============================================================
@@ -912,7 +1160,10 @@ export const logsCardio = {
 // =============================================================
 
 export const logsTreino = {
-  create: async (userId: string, treinoId: string, duracaoSegundos: number): Promise<LogTreino> => {
+  create: async (userId: string, treinoId: string | null, duracaoSegundos: number): Promise<LogTreino> => {
+    cacheDeletePrefix('progresso:');
+    cacheDeletePrefix('volume:');
+    cacheDeletePrefix('sequencia:');
     const duracaoNormalizada = Math.max(0, Math.round(duracaoSegundos));
     const duracaoFinal = duracaoNormalizada > DURACAO_MAX_SEG ? DURACAO_TETO_SEG : duracaoNormalizada;
 
@@ -931,23 +1182,26 @@ export const logsTreino = {
   },
 
   getByCliente: async (userId: string): Promise<SessaoHistorico[]> => {
-    const { data, error } = await supabase
-      .from('logs_treino')
-      .select('id, treino_id, data_execucao, duracao_segundos, treinos_ficha(letra_ou_nome)')
-      .eq('user_id', userId)
-      .order('data_execucao', { ascending: false });
+    const chave = `sequencia:${userId}`;
+    return withCache(chave, async () => {
+      const { data, error } = await supabase
+        .from('logs_treino')
+        .select('id, treino_id, data_execucao, duracao_segundos, treinos_ficha(letra_ou_nome)')
+        .eq('user_id', userId)
+        .order('data_execucao', { ascending: false });
 
-    if (error || !data) return [];
+      if (error || !data) return [];
 
-    return data.map((r: any) => ({
-      id: r.id,
-      treino_id: r.treino_id,
-      nome_treino: Array.isArray(r.treinos_ficha)
-        ? r.treinos_ficha[0]?.letra_ou_nome || 'Treino'
-        : r.treinos_ficha?.letra_ou_nome || 'Treino',
-      data_execucao: r.data_execucao,
-      duracao_segundos: r.duracao_segundos ?? 0,
-    }));
+      return data.map((r: any) => ({
+        id: r.id,
+        treino_id: r.treino_id,
+        nome_treino: Array.isArray(r.treinos_ficha)
+          ? r.treinos_ficha[0]?.letra_ou_nome || 'Treino'
+          : r.treinos_ficha?.letra_ou_nome || 'Treino',
+        data_execucao: r.data_execucao,
+        duracao_segundos: r.duracao_segundos ?? 0,
+      }));
+    });
   },
 };
 
@@ -957,45 +1211,46 @@ export const logsTreino = {
 
 export const planejamento = {
   get: async (userId: string): Promise<PlanejamentoAlocacao[]> => {
-    const { data, error } = await supabase
-      .from('planejamento_semanal')
-      .select('id, dia_semana, treino_id, is_descanso, ordem, treinos_ficha(letra_ou_nome)')
-      .eq('user_id', userId)
-      .order('dia_semana', { ascending: true })
-      .order('ordem', { ascending: true });
+    const chave = `planejamento:${userId}`;
+    return withCache(chave, async () => {
+      const { data, error } = await supabase
+        .from('planejamento_semanal')
+        .select('id, dia_semana, treino_id, is_descanso, ordem, meta_cardio_semanal, treinos_ficha(letra_ou_nome)')
+        .eq('user_id', userId)
+        .order('dia_semana', { ascending: true })
+        .order('ordem', { ascending: true });
 
-    if (error || !data) return [];
+      if (error || !data) return [];
 
-    return data.map((item: any) => ({
-      id: item.id,
-      user_id: userId,
-      dia_semana: item.dia_semana,
-      treino_id: item.treino_id,
-      is_descanso: item.is_descanso,
-      ordem: item.ordem,
-      treino_nome: Array.isArray(item.treinos_ficha)
-        ? item.treinos_ficha[0]?.letra_ou_nome || null
-        : item.treinos_ficha?.letra_ou_nome || null,
-    }));
+      return data.map((item: any) => ({
+        id: item.id,
+        user_id: userId,
+        dia_semana: item.dia_semana,
+        treino_id: item.treino_id,
+        is_descanso: item.is_descanso,
+        ordem: item.ordem,
+        meta_cardio_semanal: item.meta_cardio_semanal ?? null,
+        treino_nome: Array.isArray(item.treinos_ficha)
+          ? item.treinos_ficha[0]?.letra_ou_nome || null
+          : item.treinos_ficha?.letra_ou_nome || null,
+      }));
+    });
   },
 
-  salvar: async (userId: string, semana: PlanejamentoItem[]): Promise<void> => {
-    await supabase
-      .from('planejamento_semanal')
-      .delete()
-      .eq('user_id', userId);
-
+  salvar: async (userId: string, semana: PlanejamentoItem[], metaCardioSemanal?: number | null): Promise<void> => {
+    cacheDeletePrefix('planejamento:');
     const rows = semana.map(p => ({
-      user_id: userId,
-      dia_semana: p.dia_semana,
+      dia: p.dia_semana,
       treino_id: p.treino_id || null,
-      is_descanso: p.is_descanso === true,
+      descanso: p.is_descanso === true,
       ordem: p.ordem ?? 0,
     }));
 
-    const { error } = await supabase
-      .from('planejamento_semanal')
-      .insert(rows);
+    const { error } = await supabase.rpc('salvar_planejamento', {
+      p_user_id: userId,
+      p_semana: rows,
+      p_meta_cardio: metaCardioSemanal == null ? null : Math.max(0, Math.round(metaCardioSemanal)),
+    });
 
     if (error) throw error;
   },
@@ -1080,55 +1335,67 @@ export const activities = {
 
 export const dieta = {
   getConsumoHoje: async (userId: string): Promise<Meal[]> => {
-    const hoje = hojeSP();
-    const { data, error } = await supabase
-      .from('meals')
-      .select('*')
-      .eq('user_id', userId)
-      .eq('date', hoje)
-      .order('created_at', { ascending: true });
-    if (error) return [];
-    return data as Meal[];
+    const chave = `consumo:${userId}:${hojeSP()}`;
+    return withCache(chave, async () => {
+      const hoje = hojeSP();
+      const { data, error } = await supabase
+        .from('meals')
+        .select('*')
+        .eq('user_id', userId)
+        .eq('date', hoje)
+        .order('created_at', { ascending: true });
+      if (error) return [];
+      return data as Meal[];
+    });
   },
 
   getRelatorioConsumo: async (userId: string, dias = 30): Promise<Meal[]> => {
-    const fmt = new Intl.DateTimeFormat('en-CA', {
-      timeZone: 'America/Sao_Paulo',
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
+    const chave = `relatorio:${userId}:${dias}`;
+    return withCache(chave, async () => {
+      const fmt = new Intl.DateTimeFormat('en-CA', {
+        timeZone: 'America/Sao_Paulo',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+      });
+      const agora = Date.now();
+      const inicio = fmt.format(new Date(agora - (dias - 1) * 86400000));
+      const hoje = hojeSP();
+
+      const { data, error } = await supabase
+        .from('meals')
+        .select('*')
+        .eq('user_id', userId)
+        .gte('date', inicio)
+        .lte('date', hoje)
+        .order('date', { ascending: false })
+        .order('created_at', { ascending: true });
+
+      if (error) return [];
+      return data as Meal[];
     });
-    const agora = Date.now();
-    const inicio = fmt.format(new Date(agora - (dias - 1) * 86400000));
-    const hoje = hojeSP();
-
-    const { data, error } = await supabase
-      .from('meals')
-      .select('*')
-      .eq('user_id', userId)
-      .gte('date', inicio)
-      .lte('date', hoje)
-      .order('date', { ascending: false })
-      .order('created_at', { ascending: true });
-
-    if (error) return [];
-    return data as Meal[];
   },
 };
 
 export const meals = {
   get: async (userId: string, date: string): Promise<Meal[]> => {
-    const { data, error } = await supabase
-      .from('meals')
-      .select('*')
-      .eq('user_id', userId)
-      .eq('date', date)
-      .order('created_at');
-    if (error) return [];
-    return data as Meal[];
+    const chave = `meals:${userId}:${date}`;
+    return withCache(chave, async () => {
+      const { data, error } = await supabase
+        .from('meals')
+        .select('*')
+        .eq('user_id', userId)
+        .eq('date', date)
+        .order('created_at');
+      if (error) return [];
+      return data as Meal[];
+    });
   },
 
   create: async (meal: Omit<Meal, 'id' | 'created_at'>): Promise<Meal> => {
+    cacheDeletePrefix(`consumo:${meal.user_id}:`);
+    cacheDeletePrefix(`meals:${meal.user_id}:`);
+    cacheDeletePrefix(`relatorio:${meal.user_id}:`);
     const { data, error } = await supabase
       .from('meals')
       .insert(meal)
@@ -1139,6 +1406,9 @@ export const meals = {
   },
 
   delete: async (id: string): Promise<void> => {
+    cacheDeletePrefix('consumo:');
+    cacheDeletePrefix('meals:');
+    cacheDeletePrefix('relatorio:');
     const { error } = await supabase
       .from('meals')
       .delete()
@@ -1168,17 +1438,21 @@ export const meals = {
 
 export const fixedFoods = {
   get: async (userId: string): Promise<FixedFood[]> => {
-    const { data, error } = await supabase
-      .from('fixed_foods')
-      .select('*')
-      .eq('user_id', userId)
-      .eq('is_active', true)
-      .order('name');
-    if (error) return [];
-    return data as FixedFood[];
+    const chave = `fixedfoods:${userId}`;
+    return withCache(chave, async () => {
+      const { data, error } = await supabase
+        .from('fixed_foods')
+        .select('*')
+        .eq('user_id', userId)
+        .eq('is_active', true)
+        .order('name');
+      if (error) return [];
+      return data as FixedFood[];
+    });
   },
 
   create: async (food: Omit<FixedFood, 'id'>): Promise<FixedFood> => {
+    cacheDeletePrefix(`fixedfoods:${food.user_id}`);
     const { data, error } = await supabase
       .from('fixed_foods')
       .insert(food)
@@ -1189,6 +1463,7 @@ export const fixedFoods = {
   },
 
   delete: async (id: string): Promise<void> => {
+    cacheDeletePrefix('fixedfoods:');
     const { error } = await supabase
       .from('fixed_foods')
       .delete()
@@ -1256,13 +1531,4 @@ export const api = {
   deleteFixedFood: (id: string) => fixedFoods.delete(id),
   getDailyMacros: (id: string, date: string) => meals.getDailyMacros(id, date),
   getClients: (q?: string) => usuarios.getClientes(q),
-  analyzeFood: async (data: { food_description: string; date?: string; meal_label?: string; user_id?: string }) => {
-    const res = await fetch('/api/ai/analyze-food', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data),
-    });
-    if (!res.ok) throw new Error('Erro ao analisar alimento');
-    return res.json();
-  },
 };

@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<title>LOS GYM — Conceitos de Logo</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Anton&family=Oswald:wght@500;600;700&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#0A0A0B;--surface:#151517;--surface-2:#1C1C20;--surface-3:#212126;
+    --line:#28282D;--text:#F3F2EF;--muted:#8E8E96;
+    --accent:#FF5A1F;--accent-2:#FF7A3D;--accent-dark:#8A2A0A;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--bg);font-family:'Inter',sans-serif;color:var(--text);padding:48px 32px 90px;}
+  .wrap{max-width:1160px;margin:0 auto;}
+  h1{font-family:'Anton',sans-serif;font-weight:400;text-transform:uppercase;font-size:26px;margin:0 0 6px;}
+  .sub{color:var(--muted);font-size:14px;margin:0 0 40px;max-width:680px;line-height:1.55;}
+  .sub b{color:var(--text);}
+
+  .section-label{
+    font-family:'Anton',sans-serif;font-size:12px;letter-spacing:.12em;color:var(--accent-2);
+    display:flex;align-items:center;gap:10px;margin:0 0 18px;text-transform:uppercase;
+  }
+  .section-label::after{content:"";flex:1;height:1px;background:var(--line);}
+
+  .row{display:flex;gap:20px;flex-wrap:wrap;margin-bottom:52px;}
+  .opt{
+    background:var(--surface);border:1px solid var(--line);padding:26px 22px;
+    width:250px;display:flex;flex-direction:column;align-items:center;gap:16px;text-align:center;
+  }
+  .opt-tag{font-size:10px;font-weight:800;letter-spacing:.08em;color:var(--muted);text-transform:uppercase;}
+  .opt-tag.reco{color:var(--accent-2);}
+  .compare-note{font-size:12px;color:var(--muted);line-height:1.5;}
+
+  .logo-stage{
+    width:100%;height:150px;display:flex;align-items:center;justify-content:center;
+    background:#000;border:1px solid var(--line);
+  }
+  .logo-stage.light-bg{background:#EDEBE6;}
+
+  /* ===== WORDMARK ===== */
+  .wm{font-family:'Anton',sans-serif;text-transform:uppercase;color:#fff;text-align:center;line-height:.9;}
+  .wm .los{font-size:15px;letter-spacing:.5em;color:var(--accent-2);display:block;margin-bottom:6px;}
+  .wm .gym{font-size:40px;letter-spacing:.03em;}
+  .wm .rule{width:60px;height:3px;background:var(--accent);margin:8px auto 0;}
+
+  /* ===== EMBLEMA / CREST ===== */
+  .crest{width:118px;height:118px;position:relative;}
+  .crest svg{width:100%;height:100%;}
+
+  /* ===== MONOGRAMA ===== */
+  .mono-badge{
+    width:88px;height:88px;position:relative;
+    clip-path:polygon(16px 0,100% 0,100% calc(100% - 16px),calc(100% - 16px) 100%,0 100%,0 16px);
+    display:flex;align-items:center;justify-content:center;
+    background:linear-gradient(160deg,var(--accent-2),var(--accent-dark));
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.45);
+  }
+  .mono-badge svg{width:46px;height:46px;}
+  .mono-badge.dark{background:#000;border:1px solid #2A2A2E;}
+  .mono-badge.dark svg{stroke:var(--accent);}
+
+  /* full lockups */
+  .lockup-full{display:flex;align-items:center;gap:16px;justify-content:center;}
+  .lockup-full .badge-sm{
+    width:52px;height:52px;flex:none;position:relative;
+    clip-path:polygon(10px 0,100% 0,100% calc(100% - 10px),calc(100% - 10px) 100%,0 100%,0 10px);
+    display:flex;align-items:center;justify-content:center;
+    background:linear-gradient(160deg,var(--accent-2),var(--accent-dark));
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.45);
+  }
+  .badge-sm svg{width:26px;height:26px;stroke:#0a0500;}
+  .lockup-text{text-align:left;}
+  .lockup-text .los-sm{font-family:'Anton',sans-serif;font-size:9px;letter-spacing:.35em;color:var(--accent-2);display:block;}
+  .lockup-text .gym-sm{font-family:'Anton',sans-serif;font-size:22px;letter-spacing:.02em;color:#fff;line-height:1;}
+
+  .note-box{
+    background:var(--surface);border:1px solid var(--line);border-left:3px solid var(--accent);
+    padding:20px 22px;font-size:13.5px;color:var(--muted);line-height:1.65;margin-top:8px;max-width:780px;
+  }
+  .note-box b{color:var(--text);}
+
+  .app-row{display:flex;gap:16px;flex-wrap:wrap;align-items:center;margin-top:16px;}
+  .app-card{background:#000;border:1px solid var(--line);padding:20px;display:flex;flex-direction:column;align-items:center;gap:10px;width:150px;}
+  .app-card span{font-size:10px;color:var(--muted);text-align:center;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>LOS GYM — Conceitos de Logo</h1>
+  <p class="sub">Montei em 3 direções — <b>wordmark</b> (só tipografia, mais moderno/minimal), <b>emblema/crest</b> (o estilo clássico de academia americana, tipo Gold's Gym) e <b>monograma</b> (símbolo isolado "LG", útil pra boné/adesivo/favicon). Testei em fundo preto e também em fundo claro, já que logo de academia de verdade precisa funcionar em camiseta, fachada e boné, não só em tela.</p>
+
+  <!-- WORDMARK -->
+  <p class="section-label">1 · WORDMARK (tipografia)</p>
+  <div class="row">
+    <div class="opt">
+      <span class="opt-tag reco">A · CONDENSADO INDUSTRIAL</span>
+      <div class="logo-stage">
+        <div class="wm">
+          <span class="los">L O S</span>
+          <span class="gym">GYM</span>
+          <div class="rule"></div>
+        </div>
+      </div>
+      <p class="compare-note">"LOS" espaçado e pequeno em cima, "GYM" grande e condensado embaixo, com uma linha de força no meio. Lê rápido, fica ótimo em boné e fachada.</p>
+    </div>
+
+    <div class="opt">
+      <span class="opt-tag">B · LADO A LADO</span>
+      <div class="logo-stage">
+        <div class="wm" style="display:flex;align-items:baseline;gap:10px;">
+          <span class="gym" style="font-size:34px;">LOS</span>
+          <span class="gym" style="font-size:34px;color:var(--accent-2);">GYM</span>
+        </div>
+      </div>
+      <p class="compare-note">As duas palavras na mesma linha, "GYM" em laranja pra criar contraste. Mais compacto, bom pra cabeçalho de site/app.</p>
+    </div>
+
+    <div class="opt">
+      <span class="opt-tag">C · SÓ EM PRETO E BRANCO</span>
+      <div class="logo-stage light-bg">
+        <div class="wm" style="color:#0A0A0B;">
+          <span class="los" style="color:#0A0A0B;">L O S</span>
+          <span class="gym">GYM</span>
+          <div class="rule" style="background:#0A0A0B;"></div>
+        </div>
+      </div>
+      <p class="compare-note">Mesma composição da A, mas 100% monocromática — pra gravação a laser, bordado ou impressão de baixo custo onde a cor laranja não é opção.</p>
+    </div>
+  </div>
+
+  <!-- EMBLEMA -->
+  <p class="section-label">2 · EMBLEMA / CREST (estilo clássico de academia)</p>
+  <div class="row">
+    <div class="opt">
+      <span class="opt-tag reco">D · BADGE HEXAGONAL</span>
+      <div class="logo-stage">
+        <div class="crest">
+          <svg viewBox="0 0 120 120">
+            <polygon points="60,4 110,32 110,88 60,116 10,88 10,32" fill="none" stroke="#FF5A1F" stroke-width="2.5"/>
+            <polygon points="60,14 101,37 101,83 60,106 19,83 19,37" fill="none" stroke="#FF7A3D" stroke-width="1" opacity=".5"/>
+            <path d="M40 58c3-9 8-16 14-16 2.5 0 4.5 1.5 5.5 3.8 1-2.3 3-3.8 5.5-3.8 6 0 11 7 14 16" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round"/>
+            <text x="60" y="82" text-anchor="middle" font-family="Anton" font-size="13" letter-spacing="2" fill="#fff">LOS GYM</text>
+            <text x="60" y="94" text-anchor="middle" font-family="Anton" font-size="6" letter-spacing="3" fill="#FF7A3D">EST. 2026</text>
+          </svg>
+        </div>
+      </div>
+      <p class="compare-note">Selo hexagonal com o símbolo "pico duplo" (bíceps/gráfico) no centro — bom pra adesivo, tag de roupa, carimbo de squad/box.</p>
+    </div>
+
+    <div class="opt">
+      <span class="opt-tag">E · BADGE CIRCULAR</span>
+      <div class="logo-stage">
+        <div class="crest">
+          <svg viewBox="0 0 120 120">
+            <circle cx="60" cy="60" r="56" fill="none" stroke="#FF5A1F" stroke-width="2.5"/>
+            <circle cx="60" cy="60" r="47" fill="none" stroke="#FF7A3D" stroke-width="1" opacity=".5"/>
+            <path id="arcTop" d="M20 60a40 40 0 0180 0" fill="none"/>
+            <text font-family="Anton" font-size="13" letter-spacing="3" fill="#fff"><textPath href="#arcTop" startOffset="50%" text-anchor="middle">LOS GYM</textPath></text>
+            <path d="M42 68c3-10 9-18 15-18 2.8 0 5 1.7 6 4.2 1-2.5 3.2-4.2 6-4.2 6 0 12 8 15 18" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round"/>
+            <path id="arcBottom" d="M25 78a38 38 0 0070 0" fill="none"/>
+            <text font-family="Anton" font-size="6.5" letter-spacing="3" fill="#FF7A3D"><textPath href="#arcBottom" startOffset="50%" text-anchor="middle">FORÇA · FOCO · RESULTADO</textPath></text>
+          </svg>
+        </div>
+      </div>
+      <p class="compare-note">Formato circular clássico com o lema em arco embaixo — o mais "tradicional de academia americana" das opções.</p>
+    </div>
+
+    <div class="opt">
+      <span class="opt-tag">F · CREST MONOCROMÁTICO</span>
+      <div class="logo-stage light-bg">
+        <div class="crest">
+          <svg viewBox="0 0 120 120">
+            <polygon points="60,4 110,32 110,88 60,116 10,88 10,32" fill="none" stroke="#0A0A0B" stroke-width="2.5"/>
+            <path d="M40 58c3-9 8-16 14-16 2.5 0 4.5 1.5 5.5 3.8 1-2.3 3-3.8 5.5-3.8 6 0 11 7 14 16" fill="none" stroke="#0A0A0B" stroke-width="3" stroke-linecap="round"/>
+            <text x="60" y="82" text-anchor="middle" font-family="Anton" font-size="13" letter-spacing="2" fill="#0A0A0B">LOS GYM</text>
+            <text x="60" y="94" text-anchor="middle" font-family="Anton" font-size="6" letter-spacing="3" fill="#0A0A0B">EST. 2026</text>
+          </svg>
+        </div>
+      </div>
+      <p class="compare-note">Mesmo selo da D, mas todo em uma cor — versão pra bordado, carimbo ou impressão em 1 cor.</p>
+    </div>
+  </div>
+
+  <!-- MONOGRAMA -->
+  <p class="section-label">3 · MONOGRAMA (símbolo isolado)</p>
+  <div class="row">
+    <div class="opt">
+      <span class="opt-tag reco">G · "LG" ENTRELAÇADO</span>
+      <div class="logo-stage">
+        <div class="mono-badge">
+          <svg viewBox="0 0 24 24" fill="none" stroke="#0a0500" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 4v14a2 2 0 002 2h6"/><path d="M13 8V4h6v6a4 4 0 01-4 4"/></svg>
+        </div>
+      </div>
+      <p class="compare-note">"L" e "G" desenhados como um único traço contínuo — funciona sozinho em boné, botão de app ou selo de qualidade na tag da roupa.</p>
+    </div>
+
+    <div class="opt">
+      <span class="opt-tag">H · MONOGRAMA EM AÇO</span>
+      <div class="logo-stage">
+        <div class="mono-badge dark">
+          <svg viewBox="0 0 24 24" fill="none" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 4v14a2 2 0 002 2h6"/><path d="M13 8V4h6v6a4 4 0 01-4 4"/></svg>
+        </div>
+      </div>
+      <p class="compare-note">Mesmo monograma, fundo preto com traço laranja fino — combina com peça de metal/chaveiro ou placa na academia.</p>
+    </div>
+
+    <div class="opt">
+      <span class="opt-tag">I · PICO DUPLO ISOLADO</span>
+      <div class="logo-stage">
+        <div class="mono-badge">
+          <svg viewBox="0 0 24 24" fill="none" stroke="#0a0500" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17c2-1 3-4 3-7 0-2.5 1.5-4 3-4 .8 0 1.4.5 1.7 1.2.3-.7 1-1.2 1.8-1.2 1.5 0 3 1.5 3 4 0 3 1 6 3 7"/></svg>
+        </div>
+      </div>
+      <p class="compare-note">O símbolo de bíceps/gráfico que também tinha sugerido pro app — reaproveitável se o app e a academia física forem a mesma marca.</p>
+    </div>
+  </div>
+
+  <!-- LOCKUP FINAL -->
+  <p class="section-label">LOCKUP RECOMENDADO (símbolo + nome)</p>
+  <div class="opt" style="width:auto;padding:32px 40px;">
+    <div class="logo-stage" style="width:340px;">
+      <div class="lockup-full">
+        <div class="badge-sm"><svg viewBox="0 0 24 24" fill="none" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17c2-1 3-4 3-7 0-2.5 1.5-4 3-4 .8 0 1.4.5 1.7 1.2.3-.7 1-1.2 1.8-1.2 1.5 0 3 1.5 3 4 0 3 1 6 3 7"/></svg></div>
+        <div class="lockup-text">
+          <span class="los-sm">L O S</span>
+          <span class="gym-sm">GYM</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="note-box">
+    <b>Minha recomendação:</b> use o <b>wordmark A</b> (LOS pequeno espaçado / GYM grande condensado) como logo principal do dia a dia — site, app, redes sociais — e o <b>emblema hexagonal D</b> como versão "de honra" pra coisas físicas: adesivo de carro, tag de roupa, carimbo de squad, parede da recepção. Os dois compartilham o mesmo símbolo de "pico duplo" (bíceps + gráfico), então mesmo usando peças diferentes em lugares diferentes, tudo continua parecendo a mesma marca.<br><br>
+    Todas as versões têm um par <b>colorida (laranja/preto) + monocromática</b>, porque bordado, gravação a laser e impressão barata muitas vezes não reproduzem gradiente — é bom já sair com as duas prontas.
+  </div>
+</div>
+</body>
+</html>

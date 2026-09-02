@@ -1,29 +1,32 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, lazy, Suspense } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useLocation, useParams } from 'react-router-dom';
 import { Lock, Dumbbell } from 'lucide-react';
 import { StudentDataProvider } from './contexts/StudentDataContext';
 import { useAuth } from './hooks/useAuth';
 import Login from './components/Auth/Login';
+import AguardandoAprovacao from './components/Auth/AguardandoAprovacao';
 import DefinirSenha from './components/Auth/DefinirSenha';
 import NovaSenha from './components/Auth/NovaSenha';
 import RecuperarSenha from './components/Auth/RecuperarSenha';
 import Sidebar, { BottomNav } from './components/Sidebar';
 import TopHeader from './components/TopHeader';
-import Inicio from './components/Inicio/Inicio';
-import Profile from './components/Profile/Profile';
-import Workouts from './components/Workouts/Workouts';
-import Diet from './components/Diet/Diet';
-import Alunos from './components/Alunos/Alunos';
-import Relatorios from './components/Relatorios/Relatorios';
-import DashboardGestor from './components/DashboardGestor/DashboardGestor';
-import AlunoLayout from './components/Prontuario/AlunoLayout';
-import ProntuarioAluno from './components/Prontuario/ProntuarioAluno';
-import ProntuarioAcompanhamento from './components/Prontuario/ProntuarioAcompanhamento';
-import ProntuarioAvaliacaoFisica from './components/Prontuario/ProntuarioAvaliacaoFisica';
-import ProntuarioProgressao from './components/Prontuario/ProntuarioProgressao';
-import PlanejamentoSemanal from './components/Prontuario/PlanejamentoSemanal';
-import Progressao from './components/Progressao/Progressao';
 import PWAInstallBanner from './components/PWAInstallBanner';
+
+// Páginas carregadas sob demanda (cada aba baixa seu chunk separado)
+const Inicio = lazy(() => import('./components/Inicio/Inicio'));
+const Profile = lazy(() => import('./components/Profile/Profile'));
+const Workouts = lazy(() => import('./components/Workouts/Workouts'));
+const Diet = lazy(() => import('./components/Diet/Diet'));
+const Alunos = lazy(() => import('./components/Alunos/Alunos'));
+const Relatorios = lazy(() => import('./components/Relatorios/Relatorios'));
+const DashboardGestor = lazy(() => import('./components/DashboardGestor/DashboardGestor'));
+const AlunoLayout = lazy(() => import('./components/Prontuario/AlunoLayout'));
+const ProntuarioAluno = lazy(() => import('./components/Prontuario/ProntuarioAluno'));
+const ProntuarioAcompanhamento = lazy(() => import('./components/Prontuario/ProntuarioAcompanhamento'));
+const ProntuarioAvaliacaoFisica = lazy(() => import('./components/Prontuario/ProntuarioAvaliacaoFisica'));
+const ProntuarioProgressao = lazy(() => import('./components/Prontuario/ProntuarioProgressao'));
+const PlanejamentoSemanal = lazy(() => import('./components/Prontuario/PlanejamentoSemanal'));
+const Progressao = lazy(() => import('./components/Progressao/Progressao'));
 
 // Wrappers: injetam o alunoId da rota nas telas de treino/dieta
 function WorkoutsDoAluno() {
@@ -45,6 +48,17 @@ function Placeholder({ title }: { title: string }) {
         </div>
         <h2 className="font-display uppercase text-[22px] text-bone mb-2">{title}</h2>
         <p className="text-sm text-muted-steel">Esta funcionalidade será implementada nas próximas fases.</p>
+      </div>
+    </div>
+  );
+}
+
+function PageLoading() {
+  return (
+    <div className="flex items-center justify-center py-20 min-h-[60vh]">
+      <div className="flex flex-col items-center gap-3">
+        <div className="w-8 h-8 border-2 border-accent/30 border-t-accent rounded-full animate-spin" />
+        <span className="text-[12px] text-zinc-500 font-medium">Carregando...</span>
       </div>
     </div>
   );
@@ -158,27 +172,29 @@ function AppContent() {
         <div className="flex-1 flex flex-col overflow-hidden min-w-0">
           <TopHeader onMenuClick={() => setMobileMenuOpen(true)} />
           <main className="flex-1 overflow-y-auto pb-20 md:pb-0">
-            <Routes>
-              <Route path="/" element={<DashboardGestor />} />
-              <Route path="/inicio" element={<DashboardGestor />} />
-              {/* Abas legadas do gestor: consolidadas no Prontuario (via /alunos) */}
-              <Route path="/perfil" element={<Navigate to="/alunos" replace />} />
-              <Route path="/avaliacao" element={<Navigate to="/alunos" replace />} />
-              <Route path="/treinos" element={<Navigate to="/alunos" replace />} />
-              <Route path="/dieta" element={<Navigate to="/alunos" replace />} />
-              <Route path="/alunos" element={<Alunos />} />
-              <Route path="/alunos/:alunoId" element={<AlunoLayout />}>
-                <Route index element={<ProntuarioAluno />} />
-                <Route path="treino" element={<WorkoutsDoAluno />} />
-                <Route path="planejamento" element={<PlanejamentoSemanal />} />
-                <Route path="progresso" element={<ProntuarioProgressao />} />
-                <Route path="dieta" element={<DietDoAluno />} />
-                <Route path="acompanhamento" element={<ProntuarioAcompanhamento />} />
-                <Route path="avaliacao" element={<ProntuarioAvaliacaoFisica />} />
-              </Route>
-              <Route path="/progresso" element={<Placeholder title="Progresso" />} />
-              <Route path="/relatorios" element={<Relatorios />} />
-            </Routes>
+            <Suspense fallback={<PageLoading />}>
+              <Routes>
+                <Route path="/" element={<DashboardGestor />} />
+                <Route path="/inicio" element={<DashboardGestor />} />
+                {/* Abas legadas do gestor: consolidadas no Prontuario (via /alunos) */}
+                <Route path="/perfil" element={<Navigate to="/alunos" replace />} />
+                <Route path="/avaliacao" element={<Navigate to="/alunos" replace />} />
+                <Route path="/treinos" element={<Navigate to="/alunos" replace />} />
+                <Route path="/dieta" element={<Navigate to="/alunos" replace />} />
+                <Route path="/alunos" element={<Alunos />} />
+                <Route path="/alunos/:alunoId" element={<AlunoLayout />}>
+                  <Route index element={<ProntuarioAluno />} />
+                  <Route path="treino" element={<WorkoutsDoAluno />} />
+                  <Route path="planejamento" element={<PlanejamentoSemanal />} />
+                  <Route path="progresso" element={<ProntuarioProgressao />} />
+                  <Route path="dieta" element={<DietDoAluno />} />
+                  <Route path="acompanhamento" element={<ProntuarioAcompanhamento />} />
+                  <Route path="avaliacao" element={<ProntuarioAvaliacaoFisica />} />
+                </Route>
+                <Route path="/progresso" element={<Placeholder title="Progresso" />} />
+                <Route path="/relatorios" element={<Relatorios />} />
+              </Routes>
+            </Suspense>
           </main>
         </div>
         <BottomNav isVIP={true} isAdmin={true} />
@@ -188,7 +204,7 @@ function AppContent() {
 
   if (profile.status !== 'ativo') {
     if (isAuthScreen) return <AuthScreenRoutes />;
-    return <Login />;
+    return <AguardandoAprovacao />;
   }
 
   return (
@@ -196,19 +212,21 @@ function AppContent() {
       <Sidebar mobileOpen={mobileMenuOpen} onMobileClose={() => setMobileMenuOpen(false)} isVIP={isVIP} isAdmin={false} isPremium={isPremium} />
       <div className="flex-1 flex flex-col overflow-hidden min-w-0">
         <TopHeader onMenuClick={() => setMobileMenuOpen(true)} />
-        <main className="flex-1 overflow-y-auto pb-20 md:pb-0">
-            <Routes>
-              <Route path="/" element={<Navigate to="/inicio" replace />} />
-              <Route path="/inicio" element={<Inicio />} />
-              {!isPremium && <Route path="/perfil" element={<Profile />} />}
-              <Route path="/treinos" element={<Workouts />} />
-              <Route path="/avaliacao" element={<AreaRestrita />} />
-              <Route path="/dieta" element={isVIP ? <Diet /> : <VipOnly />} />
-              <Route path="/progresso" element={<Progressao />} />
-              <Route path="/relatorios" element={<AreaRestrita />} />
-              <Route path="*" element={<Navigate to="/inicio" replace />} />
-            </Routes>
-        </main>
+<main className="flex-1 overflow-y-auto pb-20 md:pb-0">
+            <Suspense fallback={<PageLoading />}>
+              <Routes>
+                <Route path="/" element={<Navigate to="/inicio" replace />} />
+                <Route path="/inicio" element={<Inicio />} />
+                {!isPremium && <Route path="/perfil" element={<Profile />} />}
+                <Route path="/treinos" element={<Workouts />} />
+                <Route path="/avaliacao" element={<AreaRestrita />} />
+                <Route path="/dieta" element={isVIP ? <Diet /> : <VipOnly />} />
+                <Route path="/progresso" element={<Progressao />} />
+                <Route path="/relatorios" element={<AreaRestrita />} />
+                <Route path="*" element={<Navigate to="/inicio" replace />} />
+              </Routes>
+            </Suspense>
+          </main>
       </div>
       <BottomNav isVIP={isVIP} isAdmin={false} isPremium={isPremium} />
     </div>

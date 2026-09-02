@@ -1,10 +1,12 @@
 import { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { LogOut, ChevronDown, Shield, Flame } from 'lucide-react';
+import StudentAvatar from './ui/StudentAvatar';
 import { useAuth } from '../hooks/useAuth';
 import { useSequencia } from '../hooks/useSequencia';
 import { auth } from '../services/api';
 import { MobileMenuButton } from './Sidebar';
+import { LogoWordmark } from './icons/AppIcons';
 
 function getInitials(name: string): string {
   const parts = name?.split(' ') || [];
@@ -38,10 +40,12 @@ export default function TopHeader({ onMenuClick }: TopHeaderProps) {
   const initials = getInitials(nome);
 
   return (
-    <header className="relative z-[35] min-h-[58px] shrink-0 bg-ink/60 backdrop-blur-sm border-b border-line flex items-center justify-between gap-3 pl-4 pr-4 md:pr-5 py-2.5">
+    <header className="relative z-[35] min-h-[58px] shrink-0 bg-ink/60 backdrop-blur-sm border-b border-line flex items-center justify-between gap-3 pl-4 pr-4 md:pr-5 pt-[env(safe-area-inset-top)] pb-2.5">
       <div className="flex items-center gap-2">
         <MobileMenuButton onClick={onMenuClick || (() => {})} />
-        <span className="md:hidden font-display text-[13px] tracking-[0.03em] text-bone uppercase">FitnessApp</span>
+        <span className="md:hidden">
+          <LogoWordmark size="sm" />
+        </span>
       </div>
       <div className="flex items-center gap-2.5">
         <div
@@ -58,9 +62,7 @@ export default function TopHeader({ onMenuClick }: TopHeaderProps) {
           onClick={() => setOpen(!open)}
           className="flex items-center gap-2.5 px-1.5 py-1 hover:bg-panel transition-colors clip-bevel-sm"
         >
-          <div className="w-[34px] h-[34px] flex-none bg-panel-2 border border-line flex items-center justify-center clip-bevel-sm">
-            <span className="text-[12px] font-extrabold text-bone">{loading ? '...' : initials}</span>
-          </div>
+          <StudentAvatar size="sm" />
           <div className="hidden sm:flex flex-col items-start">
             <span className="text-[12px] font-semibold text-bone leading-tight">
               {loading ? 'Carregando...' : nome}

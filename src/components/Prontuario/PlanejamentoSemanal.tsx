@@ -11,12 +11,13 @@ import {
 import { CSS } from '@dnd-kit/utilities';
 import {
   CalendarRange, Moon, X, Save, Check, Loader2, AlertCircle,
-  GripVertical, Dumbbell, MousePointerClick,
+  GripVertical, Dumbbell, MousePointerClick, Flame, Timer, Layers,
 } from 'lucide-react';
-import { fichas, planejamento } from '../../services/api';
+import { fichas, logsExecucao, planejamento } from '../../services/api';
 import { DAYS_OF_WEEK, DAYS_SHORT } from '../../types';
 import { useAlunoContext } from './AlunoLayout';
-import type { FichaCompleta, PlanejamentoItem } from '../../types';
+import type { FichaCompleta, PlanejamentoItem, SessaoComProgresso } from '../../types';
+import { dataSP, dataDeDiaSemana } from '../../utils/semanaUtils';
 
 function erroMsg(e: unknown): string {
   return e instanceof Error ? e.message : 'Erro inesperado. Tente novamente.';
@@ -55,9 +56,13 @@ export default function PlanejamentoSemanal() {
   const [error, setError] = useState('');
   const [feedback, setFeedback] = useState<{ tipo: 'ok' | 'erro'; msg: string } | null>(null);
   const [ficha, setFicha] = useState<FichaCompleta | null>(null);
+  const [periodizacaoSelecionada, setPeriodizacaoSelecionada] = useState<string>('');
   const [semana, setSemana] = useState<DiaState[]>(semanaVazia);
   const [snapshotSalvo, setSnapshotSalvo] = useState('');
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
+  const [progresso, setProgresso] = useState<SessaoComProgresso[]>([]);
+  const [metaCardio, setMetaCardio] = useState<string>('');
+  const [metaCardioSnapshot, setMetaCardioSnapshot] = useState<string>('');
 
   // Fallback mobile: chip selecionado + toque no dia aloca
   const [chipSelecionado, setChipSelecionado] = useState<string | null>(null);
@@ -75,9 +80,10 @@ export default function PlanejamentoSemanal() {
     setError('');
     (async () => {
       try {
-        const [f, plano] = await Promise.all([
+        const [f, plano, logs] = await Promise.all([
           fichas.getAtiva(alunoId, 'treino'),
           planejamento.get(alunoId),
+          logsExecucao.getProgresso(alunoId).catch(() => [] as SessaoComProgresso[]),
         ]);
         if (cancel) return;
         const base = semanaVazia();
@@ -91,8 +97,20 @@ export default function PlanejamentoSemanal() {
           }
         }
         setFicha(f);
+        const periodizacoesDaFicha = f?.periodizacoes || [];
+        setPeriodizacaoSelecionada(prev => {
+          if (prev && periodizacoesDaFicha.some(p => p.id === prev)) return prev;
+          const padrao = periodizacoesDaFicha.find(p =>
+            p.nome.trim().toLowerCase() === 'padrão' || p.nome.trim().toLowerCase() === 'padrao'
+          );
+          return padrao?.id ?? periodizacoesDaFicha[0]?.id ?? '';
+        });
         setSemana(base);
         setSnapshotSalvo(JSON.stringify(base));
+        setProgresso(logs);
+        const meta = plano.length > 0 ? plano[0].meta_cardio_semanal ?? 0 : 0;
+        setMetaCardio(meta > 0 ? String(meta) : '');
+        setMetaCardioSnapshot(meta > 0 ? String(meta) : '');
       } catch (e) {
         if (!cancel) setError(erroMsg(e));
       } finally {
@@ -102,7 +120,10 @@ export default function PlanejamentoSemanal() {
     return () => { cancel = true; };
   }, [alunoId]);
 
-  const sujo = useMemo(() => JSON.stringify(semana) !== snapshotSalvo, [semana, snapshotSalvo]);
+  const sujo = useMemo(
+    () => JSON.stringify(semana) !== snapshotSalvo || metaCardio.trim() !== metaCardioSnapshot,
+    [semana, snapshotSalvo, metaCardio, metaCardioSnapshot]
+  );
 
   const salvarSemana = useCallback(async () => {
     if (!alunoId || !sujo) return;
@@ -118,15 +139,17 @@ export default function PlanejamentoSemanal() {
           itens.push({ dia_semana: diaIdx, treino_id: null, is_descanso: true, ordem: 0 });
         }
       });
-      await planejamento.salvar(alunoId, itens);
+      const metaValor = parseInt(metaCardio.replace(/\D/g, ''), 10);
+      await planejamento.salvar(alunoId, itens, metaValor > 0 ? metaValor : null);
       setSnapshotSalvo(JSON.stringify(semana));
+      setMetaCardioSnapshot(metaValor > 0 ? String(metaValor) : '');
       setSaveStatus('saved');
       setTimeout(() => setSaveStatus(s => (s === 'saved' ? 'idle' : s)), 2000);
     } catch (e) {
       setSaveStatus('error');
       setError(erroMsg(e));
     }
-  }, [alunoId, semana, sujo]);
+  }, [alunoId, semana, sujo, metaCardio]);
 
   // -----------------------------------------------------------
   // Mutacoes locais
@@ -220,8 +243,30 @@ export default function PlanejamentoSemanal() {
   // -----------------------------------------------------------
 
   const treinosFicha = useMemo(
-    () => (ficha?.treinos || []).map(t => ({ id: t.id, nome: t.letra_ou_nome, qtdEx: t.exercicios?.length ?? 0 })),
+    () => (ficha?.treinos || []).map(t => ({
+      id: t.id,
+      periodizacaoId: t.periodizacao_id,
+      nome: t.letra_ou_nome,
+      qtdEx: t.exercicios?.length ?? 0,
+      ehPuroCardio: (t.exercicios?.length ?? 0) > 0 && (t.exercicios || []).every(e => e.categoria === 'cardio'),
+    })),
     [ficha]
+  );
+
+  // Periodizações da ficha (para o filtro do banco de treinos).
+  const periodizacoes = useMemo(
+    () => (ficha?.periodizacoes || []).map(p => ({
+      id: p.id,
+      nome: p.nome,
+      qtdTreinos: treinosFicha.filter(t => t.periodizacaoId === p.id).length,
+    })),
+    [ficha, treinosFicha]
+  );
+
+  // Banco de treinos visível = apenas os da periodização selecionada.
+  const treinosBanco = useMemo(
+    () => treinosFicha.filter(t => t.periodizacaoId === periodizacaoSelecionada),
+    [treinosFicha, periodizacaoSelecionada]
   );
 
   const diasUsados = useMemo(() => {
@@ -230,7 +275,65 @@ export default function PlanejamentoSemanal() {
     return map;
   }, [semana]);
 
+  // "Treino(s) concluído(s) hoje": existe sessão finalizada na DATA daquele
+  // dia da semana (fuso SP). Dia concluído = TODOS os treinos alocados feitos.
+  const concluidoPorData = useMemo(() => {
+    const set = new Set<string>();
+    for (const s of progresso) {
+      if (!s.treino_id) continue;
+      const d = dataSP(s.data_execucao);
+      if (d) set.add(`${s.treino_id}|${d}`);
+    }
+    return set;
+  }, [progresso]);
+
+  const diaConcluidoPorIdx = useMemo(() => {
+    const out: boolean[] = DAYS_OF_WEEK.map(({ index }) => {
+      const ids = semana[index]?.treinos.map(a => a.treinoId) || [];
+      if (ids.length === 0) return false;
+      const data = dataDeDiaSemana(index);
+      return data !== '' && ids.every(id => concluidoPorData.has(`${id}|${data}`));
+    });
+    return out;
+  }, [semana, concluidoPorData]);
+
+  const resumoSemana = useMemo(() => {
+    const treinoDias = semana.filter(d => d.treinos.length > 0).length;
+    const descansoDias = semana.filter(d => d.descanso && d.treinos.length === 0).length;
+    const concluidosDias = diaConcluidoPorIdx.filter(Boolean).length;
+    return { treinoDias, descansoDias, livres: 7 - treinoDias - descansoDias, concluidosDias };
+  }, [semana, diaConcluidoPorIdx]);
+
   const totalAlocacoes = useMemo(() => semana.reduce((s, d) => s + d.treinos.length, 0), [semana]);
+
+  // Cardio semanal (minutos acumulados + por dia) para o histórico do Gestor.
+  // Soma duracao_min dos cardios de sessoes desta semana (fuso SP), incluindo
+  // os registros avulsos de Cardio Isolado Livre (sessao sem treino).
+  const cardioSemana = useMemo(() => {
+    let total = 0;
+    const porDia = new Map<number, number>();
+    for (const s of progresso) {
+      const data = dataSP(s.data_execucao);
+      if (data === '') continue;
+      const dow = new Date(data + 'T12:00:00').getDay();
+      const minsSessao = (s.cardios || []).reduce((acc, c) => acc + (Number(c.duracao_min) || 0), 0);
+      if (minsSessao > 0) {
+        total += minsSessao;
+        porDia.set(dow, (porDia.get(dow) || 0) + minsSessao);
+      }
+    }
+    return { total: Math.round(total), porDia };
+  }, [progresso]);
+
+  const metaCardioValor = parseInt(metaCardio.replace(/\D/g, ''), 10) || 0;
+  const cardioPct = metaCardioValor > 0
+    ? Math.min(100, Math.round((cardioSemana.total / metaCardioValor) * 100))
+    : 0;
+  const cardioMetaAtingida = metaCardioValor > 0 && cardioSemana.total >= metaCardioValor;
+  const totalCardioCardios = useMemo(
+    () => progresso.reduce((acc, s) => acc + (s.cardios || []).length, 0),
+    [progresso]
+  );
 
   function nomeTreino(id: string): string {
     return treinosFicha.find(t => t.id === id)?.nome || 'Treino removido';
@@ -308,6 +411,70 @@ export default function PlanejamentoSemanal() {
           );
         })()}
 
+        {!loading && ficha && (
+          <div className="bg-panel border border-line clip-bevel-sm p-4 md:p-5">
+            <div className="flex flex-col md:flex-row md:items-center gap-4 md:gap-6">
+              {/* Meta semanal de cardio */}
+              <div className="flex-1">
+                <label className="text-[11px] font-bold uppercase tracking-wider text-muted-steel mb-1.5 block flex items-center gap-1.5">
+                  <Flame size={13} className="text-orange-400" /> Meta Semanal de Cardio (min)
+                </label>
+                <div className="flex items-center gap-2.5">
+                  <input
+                    type="number"
+                    inputMode="numeric"
+                    min={0}
+                    value={metaCardio}
+                    onChange={e => setMetaCardio(e.target.value)}
+                    placeholder="Ex.: 150"
+                    className="w-28 bg-zinc-900 border border-zinc-800 rounded px-3 py-2 text-lg font-bold text-bone focus:outline-none focus:border-accent tabular-nums"
+                  />
+                  <p className="text-[11px] text-muted-steel leading-snug max-w-[220px]">
+                    Meta global da semana (Seg-Sáb). O aluno abate os minutos do Cardio Isolado Livre. Se vazio, usa a soma dos cardios da ficha.
+                  </p>
+                </div>
+              </div>
+
+              {/* Progresso semanal de cardio */}
+              <div className="md:w-[48%]">
+                <div className="flex items-center justify-between mb-1.5">
+                  <span className="text-[11px] font-bold uppercase tracking-wider text-muted-steel flex items-center gap-1.5">
+                    <Timer size={13} className="text-orange-400" /> Cardio na semana (Seg-Sáb)
+                  </span>
+                  <span className={`text-[11px] font-extrabold ${cardioMetaAtingida ? 'text-[#FFC850]' : 'text-bone'}`}>
+                    {cardioSemana.total} {metaCardioValor > 0 ? `/ ${metaCardioValor}` : ''} min
+                  </span>
+                </div>
+                <div className="h-2.5 bg-[#101012] border border-line overflow-hidden">
+                  <div
+                    className={`h-full transition-all duration-500 ${
+                      cardioMetaAtingida
+                        ? 'bg-gradient-to-r from-[#FFC850] to-[#FF7A3D]'
+                        : 'bg-gradient-to-r from-accent to-accent-light'
+                    }`}
+                    style={{ width: `${cardioPct}%` }}
+                  />
+                </div>
+                <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1">
+                  {DAYS_SHORT.slice(0, 7).map((dShort, i) => {
+                    const min = Math.round(cardioSemana.porDia.get(i) || 0);
+                    return (
+                      <span key={i} className="text-[9.5px] text-muted-steel">
+                        <b className="text-zinc-300">{dShort}</b> {min > 0 ? `${min}m` : '—'}
+                      </span>
+                    );
+                  })}
+                </div>
+                {cardioMetaAtingida && (
+                  <p className="mt-2 text-[11px] font-extrabold uppercase tracking-wider text-[#FFC850]">
+                    🏆 META SEMANAL DE CARDIO ATINGIDA! ({totalCardioCardios} registro(s) de cardio)
+                  </p>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
         {loading ? (
           <div className="bg-panel border border-line clip-bevel-sm p-8 text-center">
             <Loader2 size={22} className="mx-auto text-muted-steel animate-spin" />
@@ -328,9 +495,32 @@ export default function PlanejamentoSemanal() {
             onDragCancel={() => setArrastando(null)}
           >
             {/* Banco de treinos */}
+            {periodizacoes.length > 1 && (
+              <div className="flex flex-wrap items-center gap-2 mb-3">
+                <span className="text-[10px] uppercase tracking-wider text-zinc-500 font-semibold">Periodização</span>
+                <div className="flex flex-wrap gap-1.5">
+                  {periodizacoes.map(p => (
+                    <button
+                      key={p.id}
+                      onClick={() => setPeriodizacaoSelecionada(p.id)}
+                      className={`flex items-center gap-1.5 clip-bevel-sm border px-3 py-1.5 transition-colors ${
+                        periodizacaoSelecionada === p.id
+                          ? 'border-accent bg-accent/15 text-accent-light'
+                          : 'border-line bg-panel-2 text-zinc-300 hover:border-accent/40'
+                      }`}
+                      title={`Mostrar treinos de "${p.nome}"`}
+                    >
+                      <Layers size={12} className="shrink-0" />
+                      <span className="text-xs font-bold">{p.nome}</span>
+                      <span className="text-[10px] text-muted-steel">{p.qtdTreinos}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
             <ZonaBanco
               fichaNome={ficha.nome}
-              treinos={treinosFicha.map(t => ({ ...t, usos: diasUsados.get(t.id) || 0 }))}
+              treinos={treinosBanco.map(t => ({ ...t, usos: diasUsados.get(t.id) || 0 }))}
               chipSelecionado={chipSelecionado}
               onSelectChip={(id) => setChipSelecionado(c => (c === id ? null : id))}
               temSelecao={!!chipSelecionado}
@@ -346,12 +536,15 @@ export default function PlanejamentoSemanal() {
                   nomeCurto={DAYS_SHORT[index]}
                   nomeCompleto={name}
                   hoje={false}
+                  concluido={diaConcluidoPorIdx[index]}
+                  concluidoPorData={concluidoPorData}
                   chipSelecionado={chipSelecionado}
                   onSoltarSelecionado={(treinoId) => alocarTreino(treinoId, index)}
                   onToggleDescanso={() => toggleDescanso(index)}
                   onRemover={(idx) => removerAlocacao(index, idx)}
                   nomeTreino={nomeTreino}
                   qtdExTreino={(id) => treinosFicha.find(t => t.id === id)?.qtdEx ?? 0}
+                  puroCardioTreino={(id) => treinosFicha.find(t => t.id === id)?.ehPuroCardio ?? false}
                 />
               ))}
             </div>
@@ -371,7 +564,7 @@ export default function PlanejamentoSemanal() {
 
         {!loading && ficha && (
           <p className="text-[11px] text-[#6C6C74]">
-            Dias marcados como <Moon size={10} className="inline text-sky-400 -mt-0.5" /> Off aparecem como descanso no painel do aluno. O mesmo treino pode ser usado em vários dias.
+            Dias marcados como <Moon size={10} className="inline text-sky-400 -mt-0.5" /> Off aparecem como descanso no painel do aluno. O mesmo treino pode ser usado em vários dias. Dias livres ({resumoSemana.livres}) ficam sem compromisso no painel do aluno — ideal para rotinas flexíveis. · <b className="text-zinc-300">{resumoSemana.treinoDias} com treino</b> · <b className="text-sky-300">{resumoSemana.descansoDias} descanso</b> · <b className="text-zinc-300">{resumoSemana.livres} livres</b> · <b className="text-emerald-300">{resumoSemana.concluidosDias} concluído(s)</b>
           </p>
         )}
       </div>
@@ -383,10 +576,11 @@ export default function PlanejamentoSemanal() {
 // CHIP DE TREINO NO BANCO (draggable)
 // =============================================================
 
-function ChipBancoTreino({ id, nome, qtdEx, usos, selecionado, temSelecao, onSelect }: {
+function ChipBancoTreino({ id, nome, qtdEx, ehPuroCardio, usos, selecionado, temSelecao, onSelect }: {
   id: string;
   nome: string;
   qtdEx: number;
+  ehPuroCardio: boolean;
   usos: number;
   selecionado: boolean;
   temSelecao: boolean;
@@ -415,6 +609,7 @@ function ChipBancoTreino({ id, nome, qtdEx, usos, selecionado, temSelecao, onSel
       }`}
     >
       <GripVertical size={13} className={`shrink-0 ${temSelecao && !selecionado ? 'text-[#37373E]' : 'text-accent'}`} />
+      {ehPuroCardio && <Flame size={12} className="shrink-0 text-orange-400" />}
       <span className="text-xs font-bold text-bone">{nome}</span>
       <span className="text-[10px] text-muted-steel">{qtdEx} ex</span>
       {usos > 0 && (
@@ -432,7 +627,7 @@ function ChipBancoTreino({ id, nome, qtdEx, usos, selecionado, temSelecao, onSel
 
 function ZonaBanco({ fichaNome, treinos, chipSelecionado, onSelectChip, temSelecao }: {
   fichaNome: string;
-  treinos: { id: string; nome: string; qtdEx: number; usos: number }[];
+  treinos: { id: string; nome: string; qtdEx: number; ehPuroCardio: boolean; usos: number }[];
   chipSelecionado: string | null;
   onSelectChip: (id: string) => void;
   temSelecao: boolean;
@@ -480,20 +675,24 @@ function ZonaBanco({ fichaNome, treinos, chipSelecionado, onSelectChip, temSelec
 // COLUNA DO DIA (droppable com cards ordenáveis)
 // =============================================================
 
-function ColunaDia({ dia, estado, nomeCurto, nomeCompleto, hoje, chipSelecionado, onSoltarSelecionado, onToggleDescanso, onRemover, nomeTreino, qtdExTreino }: {
+function ColunaDia({ dia, estado, nomeCurto, nomeCompleto, hoje, concluido, concluidoPorData, chipSelecionado, onSoltarSelecionado, onToggleDescanso, onRemover, nomeTreino, qtdExTreino, puroCardioTreino }: {
   dia: number;
   estado: DiaState;
   nomeCurto: string;
   nomeCompleto: string;
   hoje: boolean;
+  concluido: boolean;
+  concluidoPorData: Set<string>;
   chipSelecionado: string | null;
   onSoltarSelecionado: (treinoId: string) => void;
   onToggleDescanso: () => void;
   onRemover: (idx: number) => void;
   nomeTreino: (id: string) => string;
   qtdExTreino: (id: string) => number;
+  puroCardioTreino: (id: string) => boolean;
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: diaId(dia) });
+  const dataDoDia = dataDeDiaSemana(dia);
 
   return (
     <div
@@ -502,19 +701,21 @@ function ColunaDia({ dia, estado, nomeCurto, nomeCompleto, hoje, chipSelecionado
       className={`bg-panel border clip-bevel-sm min-h-[150px] flex flex-col transition-colors duration-150 ${
         isOver
           ? 'border-accent/80 bg-accent/[0.05]'
-          : hoje
-            ? 'border-accent/40'
-            : 'border-line'
+          : concluido
+            ? 'border-emerald-500/40 bg-emerald-500/[0.04]'
+            : hoje
+              ? 'border-accent/40'
+              : 'border-line'
       }`}
     >
       {/* Header do dia */}
-      <div className={`px-3 pt-2.5 pb-2 border-b ${estado.descanso && estado.treinos.length === 0 ? 'border-sky-500/20' : 'border-line/70'}`}>
+      <div className={`px-3 pt-2.5 pb-2 border-b ${estado.descanso && estado.treinos.length === 0 ? 'border-sky-500/20' : concluido ? 'border-emerald-500/25' : 'border-line/70'}`}>
         <div className="flex items-center justify-between gap-1.5">
           <div className="min-w-0">
-            <p className={`text-[13px] font-bold leading-none ${hoje ? 'text-accent-light' : 'text-bone'}`}>
-              {nomeCurto}{hoje && <span className="ml-1.5 text-[9px] font-extrabold uppercase tracking-wider text-accent-light">hoje</span>}
+            <p className={`text-[13px] font-bold leading-none ${concluido ? 'text-emerald-300' : hoje ? 'text-accent-light' : 'text-bone'}`}>
+              {nomeCurto}{concluido && <Check size={12} className="inline ml-1 -mt-0.5 text-emerald-400" />}{hoje && !concluido && <span className="ml-1.5 text-[9px] font-extrabold uppercase tracking-wider text-accent-light">hoje</span>}
             </p>
-            <p className="text-[9.5px] text-muted-steel mt-1 truncate">{nomeCompleto}</p>
+            <p className="text-[9.5px] text-muted-steel mt-1 truncate">{concluido ? 'Concluído' : nomeCompleto}</p>
           </div>
           <button
             onClick={onToggleDescanso}
@@ -552,6 +753,8 @@ function ColunaDia({ dia, estado, nomeCurto, nomeCompleto, hoje, chipSelecionado
                 idDrag={cardId(dia, i)}
                 nome={nomeTreino(a.treinoId)}
                 qtdEx={qtdExTreino(a.treinoId)}
+                ehPuroCardio={puroCardioTreino(a.treinoId)}
+                concluido={dataDoDia !== '' && concluidoPorData.has(`${a.treinoId}|${dataDoDia}`)}
                 onRemover={() => onRemover(i)}
               />
             ))}
@@ -566,10 +769,12 @@ function ColunaDia({ dia, estado, nomeCurto, nomeCompleto, hoje, chipSelecionado
 // CARD ALOCADO EM UM DIA (sortable)
 // =============================================================
 
-function CardTreinoDia({ idDrag, nome, qtdEx, onRemover }: {
+function CardTreinoDia({ idDrag, nome, qtdEx, ehPuroCardio, concluido, onRemover }: {
   idDrag: string;
   nome: string;
   qtdEx: number;
+  ehPuroCardio: boolean;
+  concluido: boolean;
   onRemover: () => void;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: idDrag });
@@ -580,15 +785,27 @@ function CardTreinoDia({ idDrag, nome, qtdEx, onRemover }: {
       style={{ transform: CSS.Translate.toString(transform), transition }}
       {...attributes}
       {...listeners}
-      className={`group relative flex items-center gap-1.5 pl-2 pr-7 py-2 bg-panel-2 border border-line clip-bevel-sm touch-none transition-opacity ${
-        isDragging ? 'opacity-30 border-dashed' : 'hover:border-accent/40'
+      className={`group relative flex items-center gap-1.5 pl-2 pr-7 py-2 bg-panel-2 border clip-bevel-sm touch-none transition-opacity ${
+        isDragging
+          ? 'opacity-30 border-dashed'
+          : concluido
+            ? 'border-emerald-500/40'
+            : 'border-line hover:border-accent/40'
       }`}
     >
-      <GripVertical size={11} className="text-accent shrink-0 cursor-grab active:cursor-grabbing" />
-      <div className="min-w-0">
-        <p className="text-[11.5px] font-bold text-bone leading-none truncate">{nome}</p>
-        <p className="text-[9.5px] text-muted-steel mt-0.5">{qtdEx} exercício(s)</p>
+      <GripVertical size={11} className={concluido ? 'text-emerald-400 shrink-0' : 'text-accent shrink-0 cursor-grab active:cursor-grabbing'} />
+      {ehPuroCardio && <Flame size={11} className="text-orange-400 shrink-0" />}
+      <div className="min-w-0 flex-1">
+        <p className={`text-[11.5px] font-bold leading-none truncate ${concluido ? 'text-emerald-300' : 'text-bone'}`}>{nome}</p>
+        <p className={`text-[9.5px] mt-0.5 ${concluido ? 'text-emerald-400/80' : 'text-muted-steel'}`}>
+          {concluido ? 'Concluído hoje' : `${qtdEx} exercício(s)`}
+        </p>
       </div>
+      {concluido && (
+        <span className="absolute right-6 top-1/2 -translate-y-1/2 w-4 h-4 rounded-full bg-emerald-500/20 border border-emerald-500/50 flex items-center justify-center">
+          <Check size={10} className="text-emerald-300" />
+        </span>
+      )}
       <button
         onPointerDown={e => { e.stopPropagation(); }}
         onClick={e => { e.stopPropagation(); onRemover(); }}

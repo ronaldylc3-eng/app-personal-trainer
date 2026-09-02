@@ -1,14 +1,15 @@
-import { useState, useMemo, useEffect, useRef, useCallback } from 'react';
+import { useState, useMemo, useEffect, useRef, useCallback, type ReactElement } from 'react';
 import { Navigate, useLocation, useNavigate } from 'react-router-dom';
 import {
   Dumbbell, Plus, Trash2, Target, BarChart3,
   ChevronDown, Users, Check, X, Save, AlertCircle, Loader2,
   Play, RotateCcw, Flame, Pencil, MessageSquare, ChevronUp, Timer,
-  CalendarCheck, CheckCircle2, Lock, Share2,
+  CalendarCheck, CheckCircle2, Lock, Share2, Moon, Copy, Layers,
 } from 'lucide-react';
+import { BarraOlimpicaIcon, LogoBadge } from '../icons/AppIcons';
 import { useAuth } from '../../hooks/useAuth';
-import { usuarios, fichas, treinosFicha, exerciciosTreino, logsExecucao, logsCardio, logsTreino, planejamento, DURACAO_MAX_SEG, DURACAO_TETO_SEG, DURACAO_MINIMA_SEG } from '../../services/api';
-import type { Usuario, FichaCompleta, LogExecucao, LogCardioInput, ExercicioCategoria, SessaoHistorico, SessaoComProgresso, PlanejamentoAlocacao } from '../../types';
+import { usuarios, fichas, treinosFicha, exerciciosTreino, logsExecucao, logsCardio, logsTreino, planejamento, periodizacoes, DURACAO_MAX_SEG, DURACAO_TETO_SEG, DURACAO_MINIMA_SEG } from '../../services/api';
+import type { Usuario, FichaCompleta, LogExecucao, LogCardioInput, ExercicioCategoria, SessaoHistorico, SessaoComProgresso, PlanejamentoAlocacao, PlanejamentoItem, Periodizacao } from '../../types';
 import { PRINCIPAIS, microsDe, getMacroGrupo, getMacroGrupoDinamico, resolverChaveGrafico, ordemGrupos } from '../../utils/muscleGroups';
 import { haptics } from '../../utils/haptics';
 import {
@@ -17,9 +18,14 @@ import {
   getDiaSemanaExtenso,
   formatarDataBr,
   formatarDuracaoExtensa,
+  dataSP,
+  diaSemanaSP,
+  dataDeDiaSemana,
+  formatarHorarioSP,
 } from '../../utils/semanaUtils';
 import RelatorioSemanal from './RelatorioSemanal';
 import { WorkoutStoryModal, WorkoutStoryData } from './WorkoutStoryModal';
+import { CardioIsoladoModal, CardioIsoladoResultado } from './CardioIsoladoModal';
 
 export interface ExercicioUI {
   key: string;
@@ -39,6 +45,7 @@ export interface ExercicioUI {
 export interface TreinoUI {
   key: string;
   dbId?: string;
+  periodizacaoId: string;
   nome: string;
   observacoes: string;
   exercicios: ExercicioUI[];
@@ -58,6 +65,30 @@ interface CardioEntry {
   concluido: boolean;
 }
 
+interface NovaFichaPayload {
+  nome: string;
+}
+
+interface CardioTreinoPayload {
+  nome: string;
+  modalidade: string;
+  metaMin: number;
+  metaKm: string;
+}
+
+const MODALIDADES_CARDIO = [
+  'Esteira',
+  'Bike Ergométrica',
+  'Boxe',
+  'Elíptico',
+  'Pular Corda',
+  'Natação',
+  'Corrida Outdoor',
+  'Caminhada Outdoor',
+  'Remo',
+  'Outro',
+];
+
 type Feedback = { tipo: 'ok' | 'erro'; msg: string } | null;
 
 function erroMsg(e: unknown): string {
@@ -75,6 +106,12 @@ function formatarDuracao(totalSegundos: number): string {
   const m = Math.floor((s % 3600) / 60);
   const sec = s % 60;
   return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(sec).padStart(2, '0')}`;
+}
+
+// Ficha composta APENAS por cardio: nao se aplica a regra de descarte de
+// treinos curtos (<5min), pois o aluno registra o tempo no input e finaliza.
+function treinoEhSomenteCardio(treino: TreinoUI | null | undefined): boolean {
+  return !!treino && treino.exercicios.length > 0 && treino.exercicios.every(ex => ex.categoria === 'cardio');
 }
 
 function normalizarRepsPorSerie(series: number, arr: (string | null | undefined)[] | null | undefined, fallback?: string | null): string[] {
@@ -106,6 +143,7 @@ function toTreinoUI(t: FichaCompleta['treinos'][number]): TreinoUI {
   return {
     key: t.id,
     dbId: t.id,
+    periodizacaoId: t.periodizacao_id,
     nome: t.letra_ou_nome,
     observacoes: t.observacoes || '',
     exercicios: t.exercicios.map(ex => ({
@@ -163,9 +201,12 @@ function WorkoutsView({ alunoId: fixedAlunoId }: WorkoutsProps) {
 
   const [ficha, setFicha] = useState<FichaCompleta | null>(null);
   const [treinos, setTreinos] = useState<TreinoUI[]>([]);
+  const [periodizacoesList, setPeriodizacoesList] = useState<Periodizacao[]>([]);
+  const [periodizacaoSelecionada, setPeriodizacaoSelecionada] = useState<string>('');
   const [loadingFicha, setLoadingFicha] = useState(false);
 
   const [showCriarFicha, setShowCriarFicha] = useState(false);
+  const [showCardioTreino, setShowCardioTreino] = useState(false);
   const [novaFichaNome, setNovaFichaNome] = useState('');
   const [expandedTreino, setExpandedTreino] = useState<string | null>(null);
   const [addExTreinoKey, setAddExTreinoKey] = useState<string | null>(null);
@@ -173,7 +214,6 @@ function WorkoutsView({ alunoId: fixedAlunoId }: WorkoutsProps) {
   const [deleteTreinoKey, setDeleteTreinoKey] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [feedback, setFeedback] = useState<Feedback>(null);
-  const [autoSaveStatus, setAutoSaveStatus] = useState<'idle' | 'pending' | 'saving' | 'saved' | 'error'>('idle');
 
   const [selectedTreinoKey, setSelectedTreinoKey] = useState<string>('');
   const [abaAtivaAluno, setAbaAtivaAluno] = useState<'treinos' | 'relatorio'>('treinos');
@@ -209,6 +249,9 @@ function WorkoutsView({ alunoId: fixedAlunoId }: WorkoutsProps) {
   const [finalizarConfirmOpen, setFinalizarConfirmOpen] = useState(false);
   const [storyModalOpen, setStoryModalOpen] = useState(false);
   const [storyModalData, setStoryModalData] = useState<WorkoutStoryData | null>(null);
+  const [trocarTreinoModal, setTrocarTreinoModal] = useState(false);
+  const [cardioIsoladoOpen, setCardioIsoladoOpen] = useState(false);
+  const [savingCardioIsolado, setSavingCardioIsolado] = useState(false);
 
   // Fluxo guiado: qual exercicio esta aberto (-1 = nenhum)
   const [activeExerciseIndex, setActiveExerciseIndex] = useState(-1);
@@ -219,7 +262,7 @@ function WorkoutsView({ alunoId: fixedAlunoId }: WorkoutsProps) {
   // Sessao de execucao POR TREINO (treinoId + timestamp de inicio;
   // sobrevive a refresh/troca de abas via localStorage)
   const [sessaoAtiva, setSessaoAtiva] = useState<{ treinoId: string; iniciadaEm: number } | null>(null);
-  const [agoraTick, setAgoraTick] = useState<number>(() => Date.now());
+  const [sessaoExpirada, setSessaoExpirada] = useState(false);
 
   useEffect(() => {
     if (isAdmin) {
@@ -255,12 +298,38 @@ function WorkoutsView({ alunoId: fixedAlunoId }: WorkoutsProps) {
         if (cancel) return;
         setFicha(f);
         setPlanoSemanal(plano || []);
-        setTreinos(f ? f.treinos.map(toTreinoUI) : []);
-        setSelectedTreinoKey(
-          (deeplinkTreinoId && f?.treinos.some(t => t.id === deeplinkTreinoId) && deeplinkTreinoId) ||
-          f?.treinos[0]?.id ||
-          ''
-        );
+        const treinosUI = f ? f.treinos.map(toTreinoUI) : [];
+        setTreinos(treinosUI);
+        const periodizacoesDaFicha = f?.periodizacoes || [];
+        setPeriodizacoesList(periodizacoesDaFicha.map(p => ({
+          id: p.id,
+          ficha_id: p.ficha_id,
+          nome: p.nome,
+          created_at: p.created_at,
+        })));
+        setPeriodizacaoSelecionada(prev => {
+          if (prev && periodizacoesDaFicha.some(p => p.id === prev)) return prev;
+          const padrao = periodizacoesDaFicha.find(p => p.nome.trim().toLowerCase() === 'padrão' || p.nome.trim().toLowerCase() === 'padrao');
+          return padrao?.id ?? periodizacoesDaFicha[0]?.id ?? '';
+        });
+        // Aluno: a aba mostra SOMENTE o treino do dia (planejamento em SP).
+        // Deep-link de dias que nao sao hoje (ex.: canto do calendario) e ignorado.
+        const treinoInicial = (() => {
+          if (isStudent) {
+            const idsHoje = (plano || [])
+              .filter(p => p.dia_semana === diaSemanaSP() && !p.is_descanso && p.treino_id)
+              .sort((a, b) => a.ordem - b.ordem)
+              .map(p => p.treino_id!);
+            if (deeplinkTreinoId && idsHoje.includes(deeplinkTreinoId) && treinosUI.some(t => t.key === deeplinkTreinoId)) {
+              return deeplinkTreinoId;
+            }
+            return idsHoje.find(id => treinosUI.some(t => t.key === id)) || '';
+          }
+          return (deeplinkTreinoId && treinosUI.some(t => t.key === deeplinkTreinoId) && deeplinkTreinoId) ||
+            treinosUI[0]?.key ||
+            '';
+        })();
+        setSelectedTreinoKey(treinoInicial);
         // Restaura dados salvos localmente se houver
         if (isStudent && selectedAlunoId) {
           try {
@@ -307,30 +376,118 @@ function WorkoutsView({ alunoId: fixedAlunoId }: WorkoutsProps) {
     return historicoLogs.filter(log => isNaSemanaAtual(log.data_execucao, semana));
   }, [historicoLogs]);
 
-  // Mapeamento dos treinos concluídos nesta semana para bloqueio e status
+  // Resumo de "dias treinados na semana" para o Story Card — replica a regra
+  // do calendário "Minha Semana" da tela Início: um dia só conta como treinado
+  // quando TODOS os treinos prescritos daquele dia tiverem sessão registrada.
+  const resumoDiasSemana = useMemo(() => {
+    const set = new Set<string>();
+    for (const log of logsSemanaAtual) {
+      if (!log.treino_id) continue;
+      const d = dataSP(log.data_execucao);
+      if (d) set.add(`${log.treino_id}|${d}`);
+    }
+    const metaDias = new Set<number>();
+    let diasConcluidos = 0;
+    for (let dia = 0; dia < 7; dia++) {
+      const itens = planoSemanal.filter(p => p.dia_semana === dia);
+      const treinoIdsDia = itens.filter(p => !p.is_descanso && p.treino_id).map(p => p.treino_id!);
+      if (treinoIdsDia.length > 0) metaDias.add(dia);
+      const data = dataDeDiaSemana(dia);
+      if (treinoIdsDia.length > 0 && data !== '' && treinoIdsDia.every(id => set.has(`${id}|${data}`))) {
+        diasConcluidos += 1;
+      }
+    }
+    return { diasConcluidos, metaDias: metaDias.size };
+  }, [logsSemanaAtual, planoSemanal]);
+
+  // Reconta os dias concluídos considerando o treino recém-finalizado de hoje.
+  // O histórico ainda não foi recarregado ao montar o Story Card, então a sessão
+  // atual é injetada no conjunto antes da contagem (equivale ao "+1 se 1º treino
+  // do dia", respeitando a regra de "todos os treinos prescritos do dia").
+  function contarDiasComTreinoHoje(treinoIdHoje: string): { diasTreinados: number; metaDias: number } {
+    const set = new Set<string>();
+    for (const log of logsSemanaAtual) {
+      if (!log.treino_id) continue;
+      const d = dataSP(log.data_execucao);
+      if (d) set.add(`${log.treino_id}|${d}`);
+    }
+    const dataHoje = dataDeDiaSemana(diaSemanaSP());
+    if (treinoIdHoje && dataHoje) set.add(`${treinoIdHoje}|${dataHoje}`);
+    const metaDias = new Set<number>();
+    let diasConcluidos = 0;
+    for (let dia = 0; dia < 7; dia++) {
+      const itens = planoSemanal.filter(p => p.dia_semana === dia);
+      const treinoIdsDia = itens.filter(p => !p.is_descanso && p.treino_id).map(p => p.treino_id!);
+      if (treinoIdsDia.length > 0) metaDias.add(dia);
+      const data = dataDeDiaSemana(dia);
+      if (treinoIdsDia.length > 0 && data !== '' && treinoIdsDia.every(id => set.has(`${id}|${data}`))) {
+        diasConcluidos += 1;
+      }
+    }
+    return { diasTreinados: diasConcluidos, metaDias: metaDias.size };
+  }
+
+  // Mapeamento dos treinos concluídos nesta semana para bloqueio e status.
+  // A chave é o treino_id (identidade estável); não indexamos por nome porque
+  // treinos com nomes que normalizam iguais (case/acento) causariam colisão
+  // e bloqueio indevido de treinos distintos.
   const treinosCompletosNaSemana = useMemo(() => {
-    const map = new Map<string, SessaoHistorico>();
+    const map = new Map<string, SessaoComProgresso>();
     for (const log of logsSemanaAtual) {
       if (log.treino_id) {
         map.set(log.treino_id, log);
       }
-      if (log.nome_treino) {
-        map.set(log.nome_treino.trim().toLowerCase(), log);
-      }
     }
     return map;
   }, [logsSemanaAtual]);
+
+  // =============================================================
+  // ALUNO: treino(s) do DIA (planejamento semanal no fuso Sao Paulo)
+  // =============================================================
+  const diaHoje = diaSemanaSP();
+
+  const planoDeHoje = useMemo(() => {
+    const itens = planoSemanal.filter(p => p.dia_semana === diaHoje);
+    const descanso = itens.length > 0 && itens.every(p => p.is_descanso);
+    const ids = itens
+      .filter(p => !p.is_descanso && p.treino_id)
+      .sort((a, b) => a.ordem - b.ordem)
+      .map(p => p.treino_id!);
+    return {
+      tipo: ids.length > 0 ? ('treino' as const) : (descanso ? ('descanso' as const) : ('vazio' as const)),
+      ids,
+    };
+  }, [planoSemanal, diaHoje]);
+
+  const treinosDeHoje = useMemo(() => {
+    const vistos = new Set<string>();
+    const out: TreinoUI[] = [];
+    for (const id of planoDeHoje.ids) {
+      const t = treinos.find(tr => tr.dbId === id);
+      if (!t || vistos.has(t.key)) continue;
+      vistos.add(t.key);
+      out.push(t);
+    }
+    return out;
+  }, [planoDeHoje, treinos]);
 
   const selectedAluno = alunos.find(a => a.id === selectedAlunoId);
 
   // Consome o deep-link vindo do painel (Inicio -> /treinos)
   useEffect(() => {
     if (!deeplinkTreinoId) return;
+    // Aluno: deep-link so vale se apontar para um treino de HOJE.
+    if (isStudent && !treinosDeHoje.some(t => t.dbId === deeplinkTreinoId)) {
+      setExpandedTreino(null);
+      cancelAdvanceTimer();
+      window.history.replaceState({}, '');
+      return;
+    }
     setSelectedTreinoKey(deeplinkTreinoId);
     setExpandedTreino(null);
     cancelAdvanceTimer();
     window.history.replaceState({}, '');
-  }, [deeplinkTreinoId]);
+  }, [deeplinkTreinoId, isStudent, treinosDeHoje]);
 
   // =============================================================
   // ALUNO: cronometro e persistencia do treino
@@ -434,36 +591,32 @@ function WorkoutsView({ alunoId: fixedAlunoId }: WorkoutsProps) {
     });
   }, [isStudent, sessaoAtiva, treinos]);
 
-  // O interval existe apenas para re-renderizar: o tempo exibido e
-  // sempre a diferenca absoluta (Date.now() - inicio). Navegadores
-  // mobile pausam setInterval com a tela bloqueada, mas o tempo real
-  // nunca se perde.
+  // Sessao acima de 3h = orfa (esqueceu de finalizar): em vez de um tick de 1s
+  // re-renderizando a página inteira, agenda um timeout exato para a expiracao.
   useEffect(() => {
-    if (!sessaoAtiva) return;
-    setAgoraTick(Date.now());
-    const id = setInterval(() => setAgoraTick(Date.now()), 1000);
-    return () => clearInterval(id);
+    if (!sessaoAtiva) {
+      setSessaoExpirada(false);
+      return;
+    }
+    setSessaoExpirada(false);
+    const aguardar = Math.max(0, sessaoAtiva.iniciadaEm + DURACAO_MAX_SEG * 1000 - Date.now());
+    const id = setTimeout(() => setSessaoExpirada(true), aguardar);
+    return () => clearTimeout(id);
   }, [sessaoAtiva]);
 
-  // Mobile pausa o interval com a aba em background; ao voltar,
-  // sincroniza o tick imediatamente.
+  // Mobile pausa timers com a aba em background; ao voltar, reavalia a expiracao
+  // (o tempo real nunca se perde).
   useEffect(() => {
     const aoVoltar = () => {
-      if (document.visibilityState === 'visible') setAgoraTick(Date.now());
+      if (document.visibilityState !== 'visible') return;
+      if (sessaoAtiva) {
+        const agora = Date.now();
+        setSessaoExpirada(agora - sessaoAtiva.iniciadaEm > DURACAO_MAX_SEG * 1000);
+      }
     };
     document.addEventListener('visibilitychange', aoVoltar);
     return () => document.removeEventListener('visibilitychange', aoVoltar);
-  }, []);
-
-  const elapsedBruto = sessaoAtiva
-    ? Math.max(0, Math.floor((agoraTick - sessaoAtiva.iniciadaEm) / 1000))
-    : 0;
-
-  // Sessao acima de 3h = orfa (esqueceu de finalizar): cronometro
-  // congela em 03:00:00 e o modal de expiracao toma a tela.
-  const elapsedSegundos = Math.min(DURACAO_MAX_SEG, elapsedBruto);
-
-  const sessaoExpirada = !!sessaoAtiva && elapsedBruto > DURACAO_MAX_SEG;
+  }, [sessaoAtiva]);
 
   // =============================================================
   // GESTOR: criação e edição da ficha
@@ -481,20 +634,53 @@ function WorkoutsView({ alunoId: fixedAlunoId }: WorkoutsProps) {
     }
   }
 
-  async function handleCreateFicha() {
-    const nome = novaFichaNome.trim();
+  async function handleCreateFicha(payload: NovaFichaPayload) {
+    const nome = payload.nome.trim();
     if (!nome || !selectedAlunoId) return;
     setSaving(true);
     try {
       const nova = await fichas.create(selectedAlunoId, nome, 'treino');
+      let padrao: Periodizacao | null = null;
+      try {
+        padrao = await periodizacoes.create(nova.id, 'Padrão');
+      } catch {
+        const existentes = await periodizacoes.getByFicha(nova.id);
+        padrao = existentes[0] || null;
+      }
       setFicha({ ...nova, treinos: [] });
       setTreinos([]);
+      setPeriodizacoesList(padrao ? [{ ...padrao }] : []);
+      setPeriodizacaoSelecionada(padrao?.id || '');
       setShowCriarFicha(false);
       setFeedback({ tipo: 'ok', msg: `Ficha "${nome}" criada. Monte os treinos e clique em Salvar Ficha.` });
     } catch (e) {
       setFeedback({ tipo: 'erro', msg: erroMsg(e) });
     } finally {
       setSaving(false);
+    }
+  }
+
+  // "Trocar Treino de Hoje": persiste (permanentemente) a nova alocacao do
+  // dia no planejamento_semanal e recarrega a semana.
+  async function trocarTreinoDeHoje(treinoId: string) {
+    if (!selectedAlunoId) return;
+    setSavingLog(true);
+    try {
+      const novaSemana: PlanejamentoItem[] = [
+        ...planoSemanal
+          .filter(p => p.dia_semana !== diaHoje)
+          .map(p => ({ dia_semana: p.dia_semana, treino_id: p.treino_id, is_descanso: p.is_descanso, ordem: p.ordem })),
+        { dia_semana: diaHoje, treino_id: treinoId, is_descanso: false, ordem: 0 },
+      ];
+      await planejamento.salvar(selectedAlunoId, novaSemana);
+      const planoAtualizado = await planejamento.get(selectedAlunoId);
+      setPlanoSemanal(planoAtualizado);
+      setSelectedTreinoKey(treinoId);
+      setTrocarTreinoModal(false);
+    } catch (e) {
+      setLogFeedback({ tipo: 'erro', msg: erroMsg(e) });
+    } finally {
+      setSavingLog(false);
     }
   }
 
@@ -523,10 +709,15 @@ function WorkoutsView({ alunoId: fixedAlunoId }: WorkoutsProps) {
       setFeedback({ tipo: 'erro', msg: 'Todo treino precisa de um nome antes de salvar.' });
       return false;
     }
-    const duplicado = nomesNormalizados.find((n, i) => nomesNormalizados.indexOf(n) !== i);
-    if (duplicado) {
-      setFeedback({ tipo: 'erro', msg: `Existem dois treinos com o nome "${duplicado}". Renomeie um deles antes de salvar.` });
-      return false;
+    // Unicidade de nome agora e por periodizacao (o mesmo nome pode existir
+    // em periodizacoes diferentes da mesma ficha).
+    for (const pid of new Set(treinos.map(t => t.periodizacaoId))) {
+      const nomesPid = treinos.filter(t => t.periodizacaoId === pid).map(t => t.nome.trim());
+      const duplicado = nomesPid.find((n, i) => nomesPid.indexOf(n) !== i);
+      if (duplicado) {
+        setFeedback({ tipo: 'erro', msg: `Existem dois treinos com o nome "${duplicado}" na mesma periodização. Renomeie um deles antes de salvar.` });
+        return false;
+      }
     }
 
     for (const t of treinos) {
@@ -553,7 +744,7 @@ function WorkoutsView({ alunoId: fixedAlunoId }: WorkoutsProps) {
           }
           treinosAntigos.delete(treinoId);
         } else {
-          const criado = await treinosFicha.create(ficha.id, nomeTreino, obsTreino);
+          const criado = await treinosFicha.create(ficha.id, nomeTreino, obsTreino, t.periodizacaoId || undefined);
           treinoId = criado.id;
           t.dbId = treinoId;
         }
@@ -654,24 +845,68 @@ function WorkoutsView({ alunoId: fixedAlunoId }: WorkoutsProps) {
   function handleAddTreino(nome: string): { ok: boolean; erro?: string } {
     const n = nome.trim();
     if (!n) return { ok: false, erro: 'O nome do treino não pode ser vazio.' };
-    const duplicado = treinos.some(t => t.nome.trim().toLowerCase() === n.toLowerCase());
+    const duplicado = treinos.some(t =>
+      t.periodizacaoId === periodizacaoSelecionada && t.nome.trim().toLowerCase() === n.toLowerCase()
+    );
     if (duplicado) {
-      const msg = `Já existe um treino com o nome "${n}". Por favor, altere o nome pois já existe aquele.`;
+      const msg = `Já existe um treino com o nome "${n}" nesta periodização. Por favor, altere o nome.`;
       setFeedback({ tipo: 'erro', msg });
       return { ok: false, erro: msg };
     }
-    const novo: TreinoUI = { key: `t-${Date.now()}`, nome: n, observacoes: '', exercicios: [] };
+    const novo: TreinoUI = { key: `t-${Date.now()}`, periodizacaoId: periodizacaoSelecionada, nome: n, observacoes: '', exercicios: [] };
     setTreinos(prev => [...prev, novo]);
     setExpandedTreino(novo.key);
+    return { ok: true };
+  }
+
+  function handleAddTreinoCardio(payload: CardioTreinoPayload): { ok: boolean; erro?: string } {
+    const n = payload.nome.trim();
+    if (!n) return { ok: false, erro: 'O nome do treino não pode ser vazio.' };
+    const duplicado = treinos.some(t =>
+      t.periodizacaoId === periodizacaoSelecionada && t.nome.trim().toLowerCase() === n.toLowerCase()
+    );
+    if (duplicado) {
+      const msg = `Já existe um treino com o nome "${n}" nesta periodização. Por favor, altere o nome.`;
+      setFeedback({ tipo: 'erro', msg });
+      return { ok: false, erro: msg };
+    }
+    const chaveEx = `ex-${Date.now()}`;
+    const novo: TreinoUI = {
+      key: `t-${Date.now()}-cardio`,
+      periodizacaoId: periodizacaoSelecionada,
+      nome: n,
+      observacoes: '',
+      exercicios: [{
+        key: chaveEx,
+        nome: payload.modalidade,
+        categoria: 'cardio',
+        musculoPrincipal: '',
+        grupo: '',
+        series: 1,
+        repsPorSerie: [],
+        aquecimentoPorSerie: [],
+        descanso: 0,
+        metaTempoMin: payload.metaMin || null,
+        metaDistanciaKm: payload.metaKm ? Number(payload.metaKm) : null,
+      }],
+    };
+    setTreinos(prev => [...prev, novo]);
+    setExpandedTreino(novo.key);
+    setShowCardioTreino(false);
+    setFeedback({ tipo: 'ok', msg: `Treino de Cardio Isolado "${n}" adicionado. Clique em Salvar Ficha para aplicar.` });
     return { ok: true };
   }
 
   function handleUpdateNomeTreino(treinoKey: string, novoNome: string): { ok: boolean; erro?: string } {
     const n = novoNome.trim();
     if (!n) return { ok: false, erro: 'O nome do treino não pode ser vazio.' };
-    const duplicado = treinos.some(t => t.key !== treinoKey && t.nome.trim().toLowerCase() === n.toLowerCase());
+    const alvo = treinos.find(t => t.key === treinoKey);
+    const pid = alvo?.periodizacaoId ?? periodizacaoSelecionada;
+    const duplicado = treinos.some(t =>
+      t.key !== treinoKey && t.periodizacaoId === pid && t.nome.trim().toLowerCase() === n.toLowerCase()
+    );
     if (duplicado) {
-      const msg = `Já existe um treino com o nome "${n}". Por favor, altere o nome pois já existe aquele.`;
+      const msg = `Já existe um treino com o nome "${n}" nesta periodização. Por favor, altere o nome.`;
       setFeedback({ tipo: 'erro', msg });
       return { ok: false, erro: msg };
     }
@@ -683,6 +918,90 @@ function WorkoutsView({ alunoId: fixedAlunoId }: WorkoutsProps) {
     setTreinos(prev => prev.filter(t => t.key !== key));
     setDeleteTreinoKey(null);
     if (expandedTreino === key) setExpandedTreino(null);
+  }
+
+  // Cria uma nova periodizacao na ficha (persistida na hora) e re-carrega.
+  async function handleCriarPeriodizacao(nome: string): Promise<{ ok: boolean; erro?: string }> {
+    const n = nome.trim();
+    if (!n) return { ok: false, erro: 'O nome da periodização não pode ser vazio.' };
+    if (!ficha) return { ok: false, erro: 'Nenhuma ficha ativa.' };
+    setSaving(true);
+    try {
+      const nova = await periodizacoes.create(ficha.id, n);
+      const atualizada = await fichas.getAtiva(selectedAlunoId, 'treino');
+      if (atualizada) {
+        reconciliarDbIds(atualizada.treinos);
+        setFicha(atualizada);
+        setPeriodizacoesList((atualizada.periodizacoes || []).map(p => ({ id: p.id, ficha_id: p.ficha_id, nome: p.nome, created_at: p.created_at })));
+        setPeriodizacaoSelecionada(nova.id);
+        setTreinos(atualizada.treinos.map(toTreinoUI));
+      }
+      setFeedback({ tipo: 'ok', msg: `Periodização "${n}" criada.` });
+      return { ok: true };
+    } catch (e) {
+      setFeedback({ tipo: 'erro', msg: erroMsg(e) });
+      return { ok: false, erro: erroMsg(e) };
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  // Exclui uma periodizacao (casca em cascata remove treinos + exercicios).
+  async function handleExcluirPeriodizacao(id: string): Promise<{ ok: boolean; erro?: string }> {
+    if (!ficha) return { ok: false, erro: 'Nenhuma ficha ativa.' };
+    const alvo = periodizacoesList.find(p => p.id === id);
+    const qtdTreinos = ficha.periodizacoes?.find(p => p.id === id)?.treinos?.length || 0;
+    setSaving(true);
+    try {
+      await periodizacoes.delete(id);
+      const atualizada = await fichas.getAtiva(selectedAlunoId, 'treino');
+      if (atualizada) {
+        reconciliarDbIds(atualizada.treinos);
+        setFicha(atualizada);
+        const periodizacoesDaFicha = atualizada.periodizacoes || [];
+        setPeriodizacoesList(periodizacoesDaFicha.map(p => ({ id: p.id, ficha_id: p.ficha_id, nome: p.nome, created_at: p.created_at })));
+        setPeriodizacaoSelecionada(prev => {
+          if (prev !== id && periodizacoesDaFicha.some(p => p.id === prev)) return prev;
+          return periodizacoesDaFicha[0]?.id || '';
+        });
+        setTreinos(atualizada.treinos.map(toTreinoUI));
+      }
+      setFeedback({ tipo: 'ok', msg: `Periodização ${alvo?.nome ? `"${alvo.nome}"` : ''} removida (${qtdTreinos} treino(s) removidos).` });
+      return { ok: true };
+    } catch (e) {
+      setFeedback({ tipo: 'erro', msg: erroMsg(e) });
+      return { ok: false, erro: erroMsg(e) };
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  // DEEP COPY do treino para outra periodizacao. Persiste imediatamente e
+  // recarrega a ficha. So funciona para treinos ja persistidos (com dbId).
+  async function handleDuplicarTreino(treinoKey: string, periodizacaoAlvoId: string): Promise<{ ok: boolean; erro?: string }> {
+    const treino = treinos.find(t => t.key === treinoKey);
+    if (!treino) return { ok: false, erro: 'Treino não encontrado.' };
+    if (treino.periodizacaoId === periodizacaoAlvoId) return { ok: false, erro: 'Escolha uma periodização diferente.' };
+    if (!treino.dbId) return { ok: false, erro: 'Este treino ainda não foi salvo. Clique em "Salvar Ficha" antes de duplicar.' };
+    if (!ficha) return { ok: false, erro: 'Nenhuma ficha ativa.' };
+    setSaving(true);
+    try {
+      const copiado = await treinosFicha.duplicar(treino.dbId, periodizacaoAlvoId);
+      const atualizada = await fichas.getAtiva(selectedAlunoId, 'treino');
+      if (atualizada) {
+        reconciliarDbIds(atualizada.treinos);
+        setFicha(atualizada);
+        setPeriodizacoesList((atualizada.periodizacoes || []).map(p => ({ id: p.id, ficha_id: p.ficha_id, nome: p.nome, created_at: p.created_at })));
+        setTreinos(atualizada.treinos.map(toTreinoUI));
+      }
+      setFeedback({ tipo: 'ok', msg: `Treino "${treino.nome}" duplicado (cópia: "${copiado.letra_ou_nome}").` });
+      return { ok: true };
+    } catch (e) {
+      setFeedback({ tipo: 'erro', msg: erroMsg(e) });
+      return { ok: false, erro: erroMsg(e) };
+    } finally {
+      setSaving(false);
+    }
   }
 
   function handleAddExercicio(treinoKey: string, ex: ExercicioUI) {
@@ -829,8 +1148,7 @@ function WorkoutsView({ alunoId: fixedAlunoId }: WorkoutsProps) {
     }
 
     const treino = treinos.find(t => t.dbId === treinoDbId);
-    const jaConcluidoNaSemana = isStudent && ((treino?.dbId && treinosCompletosNaSemana.has(treino.dbId)) ||
-      (treino?.nome && treinosCompletosNaSemana.has(treino.nome.trim().toLowerCase())));
+    const jaConcluidoNaSemana = isStudent && !!(treino?.dbId && treinosCompletosNaSemana.has(treino.dbId));
 
     if (jaConcluidoNaSemana) {
       setLogFeedback({
@@ -843,7 +1161,6 @@ function WorkoutsView({ alunoId: fixedAlunoId }: WorkoutsProps) {
     const ts = Date.now();
     if (timerStorageKey) localStorage.setItem(timerStorageKey, JSON.stringify({ treinoId: treinoDbId, ts }));
     setSessaoAtiva({ treinoId: treinoDbId, iniciadaEm: ts });
-    setAgoraTick(ts);
     setLogFeedback(null);
     cancelAdvanceTimer();
     setActiveExerciseIndex(0);
@@ -862,12 +1179,15 @@ function WorkoutsView({ alunoId: fixedAlunoId }: WorkoutsProps) {
       setLogFeedback({ tipo: 'erro', msg: 'O treino da sessão ativa não foi encontrado na ficha.' });
       return false;
     }
+    const isTreinoSomenteCardio = treinoEhSomenteCardio(treino);
 
     const duracao = duracaoOverride ?? Math.max(0, Math.floor((Date.now() - sessaoAtiva.iniciadaEm) / 1000));
 
     // Treinos muito curtos (<5 min) sao considerados clique acidental:
     // nada e salvo no sistema nem contabilizado na progressao.
-    if (duracao <= DURACAO_MINIMA_SEG) {
+    // Excecao: fitas compostas apenas por cardio, em que o aluno registra o
+    // tempo realizado no input e finaliza assim que digita os minutos.
+    if (!isTreinoSomenteCardio && duracao <= DURACAO_MINIMA_SEG) {
       setLogFeedback({ tipo: 'erro', msg: 'Treinos com menos de 05:00 não são salvos no sistema.' });
       return false;
     }
@@ -880,15 +1200,38 @@ function WorkoutsView({ alunoId: fixedAlunoId }: WorkoutsProps) {
         // Só salva séries com status definitivo (valida !== null)
         // Ignora séries pendentes (valida === null/undefined)
         if (entry.valida === null || entry.valida === undefined) return;
+        // Descarta slots nunca tocados (ex.: aquecimento pré-marcado pelo gestor
+        // que entra zerado no estado). Carga e repetições zerados não são um
+        // registro real e não podem valer como série salva.
+        const carga = Number(entry.carga) || 0;
+        const reps = Number(entry.reps) || 0;
+        if (carga <= 0 && reps <= 0) return;
         rows.push({
           exercicio_id: ex.dbId!,
           num_serie: idx + 1,
-          carga: entry.carga,
-          repeticoes_realizadas: entry.reps,
+          carga,
+          repeticoes_realizadas: reps,
           serie_valida: entry.valida === true, // true = série principal, false = aquecimento
           is_warmup: entry.isWarmup === true,
           data_treino: hojeISO(),
         });
+      });
+    }
+
+    // DIAGNÓSTICO TEMPORÁRIO: séries de Perna (masculino) que não salvam.
+    // Loga no DEV (npm run dev) o que o finalizar enxerga do estado do aluno.
+    if (import.meta.env.DEV) {
+      console.log('[finalizar:diag]', {
+        treinoId: treino.dbId,
+        treinoNome: treino.nome,
+        exerciciosDbId: treino.exercicios.filter(e => e.categoria !== 'cardio').map(e => e.dbId),
+        chavesEntries: Object.keys(studentEntries),
+        porExercicio: treino.exercicios.filter(e => e.categoria !== 'cardio').map(e => ({
+          dbId: e.dbId,
+          nome: e.nome,
+          entries: (studentEntries[e.dbId!] || []).map(x => ({ carga: x.carga, reps: x.reps, valida: x.valida, isWarmup: x.isWarmup })),
+        })),
+        rows: rows.map(r => ({ ex: r.exercicio_id, serie: r.num_serie, carga: r.carga, reps: r.repeticoes_realizadas, valida: r.serie_valida })),
       });
     }
 
@@ -908,12 +1251,30 @@ function WorkoutsView({ alunoId: fixedAlunoId }: WorkoutsProps) {
     }
 
     if (rows.length === 0 && cardioRows.length === 0) {
-      setLogFeedback({ tipo: 'erro', msg: 'Preencha pelo menos uma série ou conclua o cardio antes de finalizar.' });
+      const temForca = treino.exercicios.some(e => e.categoria !== 'cardio');
+      setLogFeedback({
+        tipo: 'erro',
+        msg: temForca
+          ? 'Marque ao menos uma série como Válida, com carga e repetições preenchidas, antes de finalizar.'
+          : 'Preencha pelo menos uma série ou conclua o cardio antes de finalizar.',
+      });
       return false;
     }
 
+    // Em treino puro cardio, a duracao salva no banco e a soma dos minutos
+    // registrados nos inputs (nao o cronometro, que o aluno encerra assim
+    // que digita o tempo realizado).
+    let duracaoCardioMin = 0;
+    for (const ex of treino.exercicios) {
+      if (!ex.dbId || ex.categoria !== 'cardio') continue;
+      const entry = cardioEntries[ex.dbId];
+      if (entry && entry.duracaoMin > 0) duracaoCardioMin += entry.duracaoMin;
+    }
+    const duracaoReal = isTreinoSomenteCardio && duracaoCardioMin > 0
+      ? Math.round(duracaoCardioMin * 60)
+      : duracao;
+
     // Calcula estatísticas para o Story Card
-    let volumeTotalKg = 0;
     let totalSeriesValidas = 0;
     let maiorCarga: { exercicioNome: string; cargaKg: number; reps?: number } | null = null;
 
@@ -921,11 +1282,11 @@ function WorkoutsView({ alunoId: fixedAlunoId }: WorkoutsProps) {
       if (!ex.dbId || ex.categoria === 'cardio') continue;
       const entries = studentEntries[ex.dbId] || [];
       for (const entry of entries) {
-        if (entry && entry.valida === true) {
+        const c = Number(entry.carga) || 0;
+        const r = Number(entry.reps) || 0;
+        // Só conta séries principais reais (carga/reps preenchidos) no Story
+        if (entry && entry.valida === true && (c > 0 || r > 0)) {
           totalSeriesValidas += 1;
-          const c = Number(entry.carga) || 0;
-          const r = Number(entry.reps) || 0;
-          volumeTotalKg += (c * r);
           if (!maiorCarga || c > maiorCarga.cargaKg) {
             maiorCarga = {
               exercicioNome: ex.nome || 'Exercício',
@@ -944,11 +1305,13 @@ function WorkoutsView({ alunoId: fixedAlunoId }: WorkoutsProps) {
     }
     const subtitulo = Array.from(gruposSet).slice(0, 3).join(' & ');
 
+    const dias = contarDiasComTreinoHoje(treino.dbId || '');
     const storyDataToSave: WorkoutStoryData = {
       treinoNome: treino.nome || 'Treino',
       subtitulo: subtitulo || undefined,
-      duracaoSegundos: duracao,
-      volumeTotalKg,
+      duracaoSegundos: duracaoReal,
+      diasTreinadosNaSemana: dias.diasTreinados,
+      metaDiasSemana: dias.metaDias,
       totalSeriesValidas,
       maiorCarga,
       dataISO: hojeISO(),
@@ -958,7 +1321,7 @@ function WorkoutsView({ alunoId: fixedAlunoId }: WorkoutsProps) {
     setSavingLog(true);
     setLogFeedback(null);
     try {
-      const logTreino = await logsTreino.create(selectedAlunoId, treino.dbId!, duracao);
+      const logTreino = await logsTreino.create(selectedAlunoId, treino.dbId!, duracaoReal);
       await Promise.all([
         logsExecucao.upsertDia(rows.map(r => ({ ...r, log_treino_id: logTreino.id }))),
         logsCardio.upsertDia(cardioRows.map(r => ({ ...r, log_treino_id: logTreino.id }))),
@@ -977,7 +1340,7 @@ function WorkoutsView({ alunoId: fixedAlunoId }: WorkoutsProps) {
       }
 
       const partes = [rows.length > 0 ? `${rows.length} série(s)` : null, cardioRows.length > 0 ? `${cardioRows.length} cardio` : null].filter(Boolean).join(' · ');
-      setLogFeedback({ tipo: 'ok', msg: `${treino.nome} registrado! Duração ${formatarDuracao(duracao)}${partes ? ` · ${partes} salva(s)` : ''}.` });
+      setLogFeedback({ tipo: 'ok', msg: `${treino.nome} registrado! Duração ${formatarDuracao(duracaoReal)}${partes ? ` · ${partes} salva(s)` : ''}.` });
 
       // Abre automaticamente o Story Card para compartilhamento
       setStoryModalData(storyDataToSave);
@@ -992,7 +1355,7 @@ function WorkoutsView({ alunoId: fixedAlunoId }: WorkoutsProps) {
   }
 
   function handleAbrirStoryDoTreino(treino?: TreinoUI | null, logSessao?: SessaoHistorico | null) {
-    haptics.selection();
+    haptics.selection?.();
 
     // Encontra o treino alvo se não foi passado diretamente
     const targetTreino = treino || (logSessao?.treino_id ? treinos.find(t => t.dbId === logSessao.treino_id) : undefined) || (logSessao?.nome_treino ? treinos.find(t => t.nome.trim().toLowerCase() === logSessao.nome_treino.trim().toLowerCase()) : undefined);
@@ -1003,7 +1366,6 @@ function WorkoutsView({ alunoId: fixedAlunoId }: WorkoutsProps) {
     const treinoNome = targetTreino?.nome || log?.nome_treino || 'Treino Realizado';
     const duracao = log?.duracao_segundos || 0;
 
-    let volumeTotalKg = 0;
     let totalSeriesValidas = 0;
     let maiorCarga: { exercicioNome: string; cargaKg: number; reps?: number } | null = null;
 
@@ -1015,7 +1377,6 @@ function WorkoutsView({ alunoId: fixedAlunoId }: WorkoutsProps) {
             totalSeriesValidas += 1;
             const c = Number(it.carga) || 0;
             const r = Number(it.reps) || 0;
-            volumeTotalKg += (c * r);
             if (!maiorCarga || c > maiorCarga.cargaKg) {
               maiorCarga = {
                 exercicioNome: ex.nome_exercicio || 'Exercício',
@@ -1036,7 +1397,6 @@ function WorkoutsView({ alunoId: fixedAlunoId }: WorkoutsProps) {
             totalSeriesValidas += 1;
             const c = Number(entry.carga) || 0;
             const r = Number(entry.reps) || 0;
-            volumeTotalKg += (c * r);
             if (!maiorCarga || c > maiorCarga.cargaKg) {
               maiorCarga = {
                 exercicioNome: ex.nome || 'Exercício',
@@ -1068,13 +1428,53 @@ function WorkoutsView({ alunoId: fixedAlunoId }: WorkoutsProps) {
       treinoNome,
       subtitulo,
       duracaoSegundos: duracao,
-      volumeTotalKg,
+      diasTreinadosNaSemana: resumoDiasSemana.diasConcluidos,
+      metaDiasSemana: resumoDiasSemana.metaDias,
       totalSeriesValidas,
       maiorCarga,
       dataISO: log?.data_execucao || hojeISO(),
       alunoNome: selectedAluno?.nome || profile?.nome || 'Aluno',
     });
     setStoryModalOpen(true);
+  }
+
+  // Atalho de Cardio Isolado Livre: após o modal salvar o registro,
+  // recarrega os logs para atualizar o acumulado semanal e abre o Story
+  // com a métrica de "minutos de hoje" + meta semanal (gamificação).
+  async function handleRegistrarCardioIsolado(resultado: CardioIsoladoResultado): Promise<void> {
+    setSavingCardioIsolado(true);
+    setLogFeedback(null);
+    try {
+      if (selectedAlunoId) {
+        await carregarLogsAluno(selectedAlunoId);
+      }
+      const acumulado = Math.round(validCardioMin || 0);
+      const meta = metaCardioMin || 0;
+      setStoryModalData({
+        treinoNome: resultado.nomeCardio || 'Cardio Isolado',
+        subtitulo: 'Cardio Isolado Livre',
+        duracaoSegundos: Math.round(resultado.duracaoMin * 60),
+        diasTreinadosNaSemana: resumoDiasSemana.diasConcluidos,
+        metaDiasSemana: resumoDiasSemana.metaDias,
+        totalSeriesValidas: 0,
+        maiorCarga: null,
+        dataISO: hojeISO(),
+        alunoNome: selectedAluno?.nome || profile?.nome || 'Aluno',
+        cardioMeta: {
+          duracaoMinHoje: resultado.duracaoMin,
+          acumuladoSemanaMin: acumulado,
+          metaSemanalMin: meta,
+        },
+      });
+      setCardioIsoladoOpen(false);
+      setStoryModalOpen(true);
+      setLogFeedback({
+        tipo: 'ok',
+        msg: `${resultado.nomeCardio} registrado! ${resultado.duracaoMin} min abatidos da sua meta semanal de cardio.`,
+      });
+    } finally {
+      setSavingCardioIsolado(false);
+    }
   }
 
   function handleDescartarSessao(navegar = true) {
@@ -1124,6 +1524,8 @@ function WorkoutsView({ alunoId: fixedAlunoId }: WorkoutsProps) {
   // Chave de agrupamento: MÚSCULO PRINCIPAL DINÂMICO POR GÊNERO
   // (aluno usa o próprio perfil; gestor usa o sexo do aluno selecionado).
   const generoGraficos = isStudent ? profile?.genero : selectedAluno?.genero;
+  // DEBUG genero
+  console.log('[DIAG genero] isStudent=', isStudent, 'profile.genero=', profile?.genero, 'selectedAluno.genero=', selectedAluno?.genero, '=> generoGraficos=', generoGraficos);
   const chavePrincipal = (ex: ExercicioUI) =>
     resolverChaveGrafico(ex.musculoPrincipal, ex.grupo, generoGraficos);
 
@@ -1154,12 +1556,24 @@ function WorkoutsView({ alunoId: fixedAlunoId }: WorkoutsProps) {
       const k = chavePrincipal(ex);
       map[k] = (map[k] || 0) + principais;
     });
+    // DEBUG metaByGroup
+    console.log('[DIAG metaByGroup] ', exerciciosForca.map(ex => `${ex.musculoPrincipal || '""'}/${ex.grupo || '""'}=>${chavePrincipal(ex)}`));
     return map;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [exerciciosForca, planoSemanal, treinos, generoGraficos]);
 
-  // Meta de Minutos de Cardio na Semana (acumulado das alocações semanais)
+  // Meta de Minutos de Cardio na Semana.
+  // "A Meta Explícita Vence, Derivada como Fallback":
+  //   1) Se o planejamento do aluno tem meta_cardio_semanal > 0 (definida
+  //      pelo Gestor no Planejamento Semanal), ela é a fonte da verdade.
+  //   2) Caso contrário, deriva da soma dos metaTempoMin alocados na semana
+  //      (retrocompatível com planejamentos antigos sem meta global).
   const metaCardioMin = useMemo(() => {
+    const metaGlobal = planoSemanal && planoSemanal.length > 0
+      ? (planoSemanal[0].meta_cardio_semanal ?? 0)
+      : 0;
+    if (metaGlobal > 0) return metaGlobal;
+
     let total = 0;
     if (planoSemanal && planoSemanal.length > 0) {
       const treinosAlocados = planoSemanal.filter(p => !p.is_descanso && p.treino_id);
@@ -1188,11 +1602,37 @@ function WorkoutsView({ alunoId: fixedAlunoId }: WorkoutsProps) {
 
   const treinoFeitoNaSemana = useMemo(() => {
     if (!selectedTreino) return null;
-    if (selectedTreino.dbId && treinosCompletosNaSemana.has(selectedTreino.dbId)) {
-      return treinosCompletosNaSemana.get(selectedTreino.dbId) || null;
-    }
-    return treinosCompletosNaSemana.get(selectedTreino.nome.trim().toLowerCase()) || null;
+    return selectedTreino.dbId ? treinosCompletosNaSemana.get(selectedTreino.dbId) || null : null;
   }, [selectedTreino, treinosCompletosNaSemana]);
+
+  // Ultima finalizacao do treino selecionado em HOJE (fuso Sao Paulo).
+  // Quando existe, o aluno ve o banner de celebracao no lugar do "Iniciar".
+  const treinoConcluidoHoje = useMemo(() => {
+    if (!selectedTreino?.dbId) return null;
+    const hoje = dataSP(new Date());
+    let ultimo: SessaoComProgresso | null = null;
+    for (const log of historicoLogs) {
+      if (log.treino_id === selectedTreino.dbId && dataSP(log.data_execucao) === hoje) {
+        if (!ultimo || (log.data_execucao || '') > (ultimo.data_execucao || '')) {
+          ultimo = log;
+        }
+      }
+    }
+    return ultimo;
+  }, [selectedTreino, historicoLogs]);
+
+  const tonelagemSessao = useMemo(() => {
+    if (!treinoConcluidoHoje) return 0;
+    let vol = 0;
+    for (const ex of treinoConcluidoHoje.series || []) {
+      for (const it of ex.itens || []) {
+        if (it.valida === true) {
+          vol += (Number(it.carga) || 0) * (Number(it.reps) || 0);
+        }
+      }
+    }
+    return vol;
+  }, [treinoConcluidoHoje]);
 
   const validByGroup = useMemo(() => {
     const map: Record<string, number> = {};
@@ -1205,6 +1645,14 @@ function WorkoutsView({ alunoId: fixedAlunoId }: WorkoutsProps) {
         if (validas > 0) {
           map[k] = (map[k] || 0) + validas;
         }
+      }
+    }
+    // DEBUG validByGroup
+    console.log('[DIAG validByGroup] genero=/<3=/> generoGraficos', generoGraficos, '| sessao', logsSemanaAtual.map(s => `${s.nome_treino}#${s.data_execucao}`));
+    for (const sessao of logsSemanaAtual) {
+      for (const ex of sessao.series || []) {
+        const k = resolverChaveGrafico(ex.musculo_principal, ex.grupo_muscular, generoGraficos);
+        console.log('[DIAG validByGroup] ex=', ex.nome_exercicio, 'principal=', ex.musculo_principal, 'grupo=', ex.grupo_muscular, '=> chave', k);
       }
     }
 
@@ -1370,51 +1818,15 @@ function WorkoutsView({ alunoId: fixedAlunoId }: WorkoutsProps) {
     return () => window.removeEventListener('beforeunload', handler);
   }, [hasUnsavedChanges]);
 
-  // Auto-save do gestor: grava 1,5s apos a ultima edicao
-  useEffect(() => {
-    if (isStudent || !hasUnsavedChanges || !ficha || saving) {
-      if (!hasUnsavedChanges && !saving) {
-        setAutoSaveStatus(s => (s === 'saved' ? s : 'idle'));
-      }
-      return;
-    }
-    setAutoSaveStatus('pending');
-    const timer = setTimeout(async () => {
-      setAutoSaveStatus('saving');
-      const ok = await executarSave();
-      if (ok) {
-        setAutoSaveStatus('saved');
-        setTimeout(() => setAutoSaveStatus(s => (s === 'saved' ? 'idle' : s)), 2000);
-      } else {
-        setAutoSaveStatus('error');
-      }
-    }, 1500);
-    return () => clearTimeout(timer);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isStudent, hasUnsavedChanges, ficha, treinos, saving]);
-
-  // Flush: grava pendencias ao desmontar (troca de aba interna)
-  const flushRef = useRef<() => void>(() => {});
-  flushRef.current = () => {
-    if (!isStudent && hasUnsavedChanges && !saving && ficha) void executarSave();
-  };
-  useEffect(() => () => { flushRef.current(); }, []);
-
   return (
     <div className="min-h-screen p-4 md:p-8 lg:p-10">
       <div className={`${isStudent ? 'max-w-[920px] space-y-[18px]' : 'max-w-6xl space-y-6'} mx-auto`}>
 
         {/* Header */}
         <div className="flex items-center gap-3.5 mb-2">
-          {isStudent ? (
-            <div className="w-[46px] h-[46px] flex-none bg-gradient-to-br from-accent-light to-plate flex items-center justify-center shadow-[inset_0_1px_0_rgba(255,255,255,0.4)] clip-bevel">
-              <Dumbbell size={22} strokeWidth={2.4} className="text-[#170B04]" />
-            </div>
-          ) : (
-            <div className="w-10 h-10 rounded-xl bg-accent/10 flex items-center justify-center border border-accent/20">
-              <Dumbbell size={20} className="text-accent" />
-            </div>
-          )}
+          <LogoBadge>
+            <BarraOlimpicaIcon size={19} strokeWidth={2} className="text-accent-light" />
+          </LogoBadge>
           <div>
             <h1 className={`tracking-tight ${isStudent ? 'font-display font-normal uppercase text-[22px] md:text-[26px] text-bone leading-tight' : 'text-lg md:text-2xl font-bold text-zinc-100'}`}>
               {isStudent ? 'Meus Treinos' : 'Fichas de Treino'}
@@ -1497,9 +1909,11 @@ function WorkoutsView({ alunoId: fixedAlunoId }: WorkoutsProps) {
                       {treinos.length} treino(s) · {allExercicios.length} exercício(s)
                     </span>
                   </div>
-                  <span className="inline-flex items-center gap-1.5 font-display text-[11px] uppercase tracking-[0.1em] text-ok border border-ok/40 bg-ok/[0.08] px-3 py-1.5 clip-bevel-sm">
-                    <span className="w-1.5 h-1.5 rounded-full bg-ok" /> Ativa
-                  </span>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="inline-flex items-center gap-1.5 font-display text-[11px] uppercase tracking-[0.1em] text-ok border border-ok/40 bg-ok/[0.08] px-3 py-1.5 clip-bevel-sm">
+                      <span className="w-1.5 h-1.5 rounded-full bg-ok" /> Ativa
+                    </span>
+                  </div>
                 </div>
               </div>
 
@@ -1515,7 +1929,7 @@ function WorkoutsView({ alunoId: fixedAlunoId }: WorkoutsProps) {
                   }`}
                 >
                   <Dumbbell size={15} />
-                  Treinos da Ficha
+                  Treino de Hoje
                 </button>
                 <button
                   type="button"
@@ -1538,26 +1952,61 @@ function WorkoutsView({ alunoId: fixedAlunoId }: WorkoutsProps) {
                 </button>
               </div>
 
+              {/* Atalho rápido: Registrar Cardio Isolado (independente do dia da semana) */}
+              {!savingCardioIsolado && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    haptics.selection?.();
+                    setCardioIsoladoOpen(true);
+                  }}
+                  className="w-full flex items-center justify-center gap-2 bg-zinc-900 border border-dashed border-orange-400/40 hover:border-orange-300/70 hover:bg-orange-400/[0.03] text-orange-300 text-sm font-semibold rounded-xl px-4 py-3 transition-all duration-150"
+                >
+                  <Flame size={15} />
+                  Registrar Cardio Isolado
+                </button>
+              )}
+
               {abaAtivaAluno === 'relatorio' ? (
                 <RelatorioSemanal
                   logsSemana={logsSemanaAtual}
                   treinosFicha={treinos}
                   nomeAluno={selectedAluno?.nome || profile?.nome}
                   onIrParaTreino={(treinoKey) => {
-                    setSelectedTreinoKey(treinoKey);
+                    // Relatório → aba de hoje: treino que não é de hoje cai no treino do dia
+                    const ehHoje = treinosDeHoje.some(t => t.key === treinoKey);
+                    setSelectedTreinoKey(ehHoje ? treinoKey : (treinosDeHoje[0]?.key || ''));
                     setAbaAtivaAluno('treinos');
                   }}
                   onCompartilharStory={(log) => {
                     handleAbrirStoryDoTreino(null, log);
                   }}
                 />
+              ) : planoDeHoje.tipo === 'descanso' ? (
+                <DiaDeDescanso onTrocar={() => setTrocarTreinoModal(true)} />
               ) : (
                 <>
-                  {treinos.length > 1 && (
+                  <div className="flex items-center justify-between gap-3 flex-wrap">
+                    <p className="text-[11px] uppercase tracking-[0.12em] font-semibold text-muted-steel flex items-center gap-1.5">
+                      <CalendarCheck size={13} className="text-accent-light" />
+                      {getDiaSemanaExtenso(dataSP(new Date()))} · treino de hoje
+                    </p>
+                    <button
+                      onClick={() => setTrocarTreinoModal(true)}
+                      className="btn-ghost text-[11px] flex items-center gap-1.5 py-1.5"
+                    >
+                      <RotateCcw size={12} />
+                      Trocar Treino de Hoje
+                    </button>
+                  </div>
+
+                  {treinosDeHoje.length > 1 && (
                     <div className="flex gap-2 overflow-x-auto pb-1">
-                      {treinos.map(t => {
-                        const completadoEste = (t.dbId && treinosCompletosNaSemana.has(t.dbId)) ||
-                          treinosCompletosNaSemana.has(t.nome.trim().toLowerCase());
+                      {treinosDeHoje.map(t => {
+                        const completadoEste = !!(t.dbId && treinosCompletosNaSemana.has(t.dbId));
+                        const concluidoHojeEste = !!t.dbId && historicoLogs.some(log =>
+                          log.treino_id === t.dbId && dataSP(log.data_execucao) === dataSP(new Date())
+                        );
                         return (
                           <button
                             key={t.key}
@@ -1571,9 +2020,9 @@ function WorkoutsView({ alunoId: fixedAlunoId }: WorkoutsProps) {
                             {completadoEste && <Check size={13} className="text-ok shrink-0" />}
                             <span>{t.nome}</span>
                             <span className="opacity-60 text-[11px]">{t.exercicios.length} ex</span>
-                            {completadoEste && (
+                            {concluidoHojeEste && (
                               <span className="text-[10px] uppercase font-bold text-ok bg-ok/10 px-1.5 py-0.2 rounded">
-                                Feito
+                                Feito hoje
                               </span>
                             )}
                           </button>
@@ -1582,14 +2031,19 @@ function WorkoutsView({ alunoId: fixedAlunoId }: WorkoutsProps) {
                     </div>
                   )}
 
-                  {selectedTreino ? (
+                  {selectedTreino && treinosDeHoje.some(t => t.key === selectedTreino.key) ? (
                     <>
                       <div ref={painelTreinoRef} className="bg-panel border border-line border-l-[3px] border-l-accent px-5 py-[18px]">
                         <div className="flex flex-wrap items-center justify-between gap-3.5 mb-1">
                           <div className="min-w-0">
                             <div className="flex items-center gap-2 flex-wrap">
                               <h3 className="text-base font-bold text-bone truncate">{selectedTreino.nome}</h3>
-                              {treinoFeitoNaSemana && !sessaoNesteTreino && (
+                              {treinoEhSomenteCardio(selectedTreino) && (
+                                <span className="inline-flex items-center gap-1 font-display text-[10px] uppercase tracking-[0.1em] text-orange-300 border border-orange-400/40 bg-orange-400/[0.08] px-2 py-0.5 clip-bevel-sm">
+                                  <Flame size={10} /> Cardio Isolado
+                                </span>
+                              )}
+                              {treinoFeitoNaSemana && !sessaoNesteTreino && !treinoConcluidoHoje && (
                                 <span className="inline-flex items-center gap-1 text-[11px] font-bold text-ok bg-ok/10 border border-ok/30 px-2 py-0.5 clip-bevel-sm">
                                   <Check size={12} /> Feito nesta semana
                                 </span>
@@ -1600,20 +2054,67 @@ function WorkoutsView({ alunoId: fixedAlunoId }: WorkoutsProps) {
                               {!sessaoAtiva && !treinoFeitoNaSemana && ' — inicie o treino para preencher as séries'}
                             </span>
                           </div>
-                          <SessaoControles
-                            ativa={sessaoNesteTreino}
-                            bloqueado={!!sessaoAtiva && !sessaoNesteTreino}
-                            nomeOutro={nomeTreinoAtivo}
-                            concluidoSemana={!!treinoFeitoNaSemana && !sessaoNesteTreino}
-                            elapsedSegundos={elapsedSegundos}
-                            saving={savingLog}
-                            destacado={todosExerciciosConcluidos}
-                            onIniciar={() => selectedTreino.dbId && handleIniciarTreino(selectedTreino.dbId)}
-                            onFinalizar={pedirFinalizacao}
-                          />
+                          {sessaoAtiva && sessaoNesteTreino ? (
+                            <RelogioSessao iniciadaEm={sessaoAtiva.iniciadaEm}>
+                              {(elapsedSegundos) => (
+                                <SessaoControles
+                                  ativa
+                                  bloqueado={false}
+                                  nomeOutro=""
+                                  concluidoSemana
+                                  elapsedSegundos={elapsedSegundos}
+                                  saving={savingLog}
+                                  destacado={todosExerciciosConcluidos}
+                                  onIniciar={() => selectedTreino.dbId && handleIniciarTreino(selectedTreino.dbId)}
+                                  onFinalizar={pedirFinalizacao}
+                                />
+                              )}
+                            </RelogioSessao>
+                          ) : treinoConcluidoHoje ? (
+                            <span className="inline-flex items-center gap-1.5 text-[11px] font-bold text-ok bg-ok/10 border border-ok/40 px-2.5 py-1.5 clip-bevel-sm">
+                              <CheckCircle2 size={13} /> Concluído hoje · {formatarHorarioSP(treinoConcluidoHoje.data_execucao)}
+                            </span>
+                          ) : (
+                            <SessaoControles
+                              ativa={sessaoNesteTreino}
+                              bloqueado={!!sessaoAtiva && !sessaoNesteTreino}
+                              nomeOutro={nomeTreinoAtivo}
+                              concluidoSemana={!!treinoFeitoNaSemana && !sessaoNesteTreino}
+                              elapsedSegundos={0}
+                              saving={savingLog}
+                              destacado={todosExerciciosConcluidos}
+                              onIniciar={() => selectedTreino.dbId && handleIniciarTreino(selectedTreino.dbId)}
+                              onFinalizar={pedirFinalizacao}
+                            />
+                          )}
                         </div>
 
-                        {treinoFeitoNaSemana && !sessaoNesteTreino && (
+{treinoConcluidoHoje && !sessaoNesteTreino ? (
+                          <div className="mb-4 mt-3 bg-emerald-500/[0.08] border border-emerald-500/25 clip-bevel-sm px-4 py-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                            <div className="flex gap-2.5 items-start">
+                              <CheckCircle2 size={16} className="text-ok shrink-0 mt-0.5" />
+                              <div className="min-w-0 text-xs">
+                                <p className="font-bold text-ok mb-0.5">Treino de Hoje Concluído!</p>
+                                <p className="text-zinc-300">
+                                  Finalizado às <strong className="text-bone">{formatarHorarioSP(treinoConcluidoHoje.data_execucao)}</strong>
+                                  {treinoConcluidoHoje.duracao_segundos > 0 && <> · duração <strong className="text-bone">{formatarDuracaoExtensa(treinoConcluidoHoje.duracao_segundos)}</strong></>}
+                                  {tonelagemSessao > 0 && <> · tonelagem <strong className="text-bone">{tonelagemSessao.toLocaleString('pt-BR')} kg</strong></>}
+                                </p>
+                                <p className="text-zinc-400 mt-1 text-[11px]">
+                                  Este treino só volta a aparecer amanhã (ou no próximo dia agendado no seu planejamento).
+                                </p>
+                              </div>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => handleAbrirStoryDoTreino(selectedTreino, treinoConcluidoHoje)}
+                              className="btn-forge text-xs flex items-center justify-center gap-1.5 py-2 px-3 self-start sm:self-auto shrink-0 shadow-plate"
+                            >
+                              <Share2 size={13} />
+                              <span>Story 📸</span>
+                            </button>
+                          </div>
+                        ) : treinoFeitoNaSemana && !sessaoNesteTreino ? (
                           <div className="mb-4 mt-3 bg-emerald-500/[0.08] border border-emerald-500/25 clip-bevel-sm px-4 py-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                             <div className="flex gap-2.5 items-start">
                               <CheckCircle2 size={16} className="text-ok shrink-0 mt-0.5" />
@@ -1636,7 +2137,7 @@ function WorkoutsView({ alunoId: fixedAlunoId }: WorkoutsProps) {
                               <span>Story 📸</span>
                             </button>
                           </div>
-                        )}
+                        ) : null}
 
                         {selectedTreino.observacoes.trim() && (
                           <div className="mb-4 mt-2 bg-accent/[0.06] border border-accent/25 clip-bevel-sm px-4 py-3 flex gap-2.5">
@@ -1718,10 +2219,12 @@ function WorkoutsView({ alunoId: fixedAlunoId }: WorkoutsProps) {
                     </div>
                   )}
                 </>
-              ) : (
+              ) : treinosDeHoje.length > 0 ? (
                 <div className="bg-panel border border-line px-5 py-8 text-center">
-                  <p className="text-sm text-zinc-400">Nenhum treino cadastrado nesta ficha ainda.</p>
+                  <p className="text-sm text-zinc-400">Selecione o treino do dia acima.</p>
                 </div>
+              ) : (
+                <DiaSemTreino onTrocar={() => setTrocarTreinoModal(true)} />
               )}
                 </>
               )}
@@ -1753,32 +2256,15 @@ function WorkoutsView({ alunoId: fixedAlunoId }: WorkoutsProps) {
             <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4 md:p-6 flex flex-col sm:flex-row sm:items-center gap-3">
               <div className="w-1 h-6 bg-accent rounded-full hidden sm:block" />
               <div className="flex-1">
-                <h2 className="text-sm font-bold text-zinc-100">{ficha.nome}</h2>
+                <h2 className="text-sm font-bold text-zinc-100 flex items-center gap-2 flex-wrap">
+                  {ficha.nome}
+                </h2>
                 <p className="text-xs text-zinc-500">
                   {treinos.length} treino(s) · {allExercicios.length} exercício(s)
                 </p>
               </div>
-              <div className="flex items-center gap-2 self-start sm:self-center">
-                {autoSaveStatus === 'pending' && (
-                  <span className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-amber-500/10 border border-amber-500/20 text-amber-400 text-[10px] font-semibold uppercase tracking-wider">
-                    <AlertCircle size={11} /> Alterações não salvas
-                  </span>
-                )}
-                {autoSaveStatus === 'saving' && (
-                  <span className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-zinc-800 border border-zinc-700 text-zinc-300 text-[10px] font-semibold uppercase tracking-wider">
-                    <Loader2 size={11} className="animate-spin" /> Salvando...
-                  </span>
-                )}
-                {autoSaveStatus === 'saved' && (
-                  <span className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-[10px] font-semibold uppercase tracking-wider">
-                    <Check size={11} /> Salvo
-                  </span>
-                )}
-                {autoSaveStatus === 'error' && (
-                  <span className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-red-500/10 border border-red-500/20 text-red-400 text-[10px] font-semibold uppercase tracking-wider">
-                    <AlertCircle size={11} /> Erro ao salvar
-                  </span>
-                )}
+              <div className="flex items-center gap-2 self-start sm:self-center flex-wrap">
+                <NovaPeriodizacaoButton onCriar={handleCriarPeriodizacao} saving={saving} />
                 <button
                   onClick={abrirCriarFicha}
                   disabled={saving}
@@ -1805,34 +2291,45 @@ function WorkoutsView({ alunoId: fixedAlunoId }: WorkoutsProps) {
               />
             )}
 
-            {treinos.length === 0 ? (
-              <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-8 text-center">
-                <p className="text-sm text-zinc-400">Ficha vazia. Adicione o primeiro treino abaixo.</p>
-              </div>
-            ) : (
-              treinos.map(t => (
-                <TreinoEditorCard
-                  key={t.key}
-                  treino={t}
-                  nomesExistentes={treinos.map(x => x.nome)}
-                  expanded={expandedTreino === t.key}
-                  onToggle={() => setExpandedTreino(expandedTreino === t.key ? null : t.key)}
-                  onDelete={() => setDeleteTreinoKey(t.key)}
-                  onUpdateNome={(novoNome) => handleUpdateNomeTreino(t.key, novoNome)}
-                  addOpen={addExTreinoKey === t.key}
-                  onToggleAdd={() => { setAddExTreinoKey(addExTreinoKey === t.key ? null : t.key); setEditExState(null); }}
-                  editEx={editExState && editExState.treinoKey === t.key ? editExState.ex : null}
-                  onToggleEdit={(ex) => handleToggleEditExercicio(t.key, ex)}
-                  onEditExercicio={(ex) => handleEditExercicio(t.key, ex)}
-                  onMoverExercicio={(idx, dir) => handleMoverExercicio(t.key, idx, dir)}
-                  onUpdateObservacoes={(obs) => handleUpdateObservacoes(t.key, obs)}
-                  onAddExercicio={(ex) => handleAddExercicio(t.key, ex)}
-                  onDeleteExercicio={(exKey) => handleDeleteExercicio(t.key, exKey)}
-                />
-              ))
-            )}
+            {/* Seletor de periodizacao + agrupamento dos treinos */}
+            <PlanificadorPeriodizacoesUI
+              periodizacoes={periodizacoesList}
+              treinos={treinos}
+              periodizacaoSelecionada={periodizacaoSelecionada}
+              onSelectPeriodizacao={setPeriodizacaoSelecionada}
+              onExcluirPeriodizacao={handleExcluirPeriodizacao}
+              expandedTreino={expandedTreino}
+              onToggleTreino={(key) => setExpandedTreino(expandedTreino === key ? null : key)}
+              onDeleteTreino={(key) => setDeleteTreinoKey(key)}
+              onUpdateNomeTreino={handleUpdateNomeTreino}
+              addExTreinoKey={addExTreinoKey}
+              onToggleAdd={(key) => { setAddExTreinoKey(addExTreinoKey === key ? null : key); setEditExState(null); }}
+              editExState={editExState}
+              onToggleEditExercicio={(trKey, ex) => handleToggleEditExercicio(trKey, ex)}
+              onEditExercicio={(trKey, ex) => handleEditExercicio(trKey, ex)}
+              onMoverExercicio={(trKey, idx, dir) => handleMoverExercicio(trKey, idx, dir)}
+              onUpdateObservacoes={(trKey, obs) => handleUpdateObservacoes(trKey, obs)}
+              onAddExercicio={(trKey, ex) => handleAddExercicio(trKey, ex)}
+              onDeleteExercicio={(trKey, exKey) => handleDeleteExercicio(trKey, exKey)}
+              onDuplicarTreino={handleDuplicarTreino}
+              onAddTreino={handleAddTreino}
+            />
 
-            <AddTreinoInline nomesExistentes={treinos.map(x => x.nome)} onAdd={handleAddTreino} />
+            {showCardioTreino ? (
+              <CardioTreinoForm
+                nomesExistentes={treinos.map(x => x.nome)}
+                saving={saving}
+                onConfirm={handleAddTreinoCardio}
+                onCancel={() => setShowCardioTreino(false)}
+              />
+            ) : (
+              <button
+                onClick={() => { setShowCardioTreino(true); setAddExTreinoKey(null); setEditExState(null); }}
+                className="w-full flex items-center justify-center gap-2 bg-zinc-900 border border-dashed border-orange-400/40 hover:border-orange-300/70 hover:bg-orange-400/[0.03] text-orange-300 text-sm font-semibold rounded-xl px-4 py-3 transition-all duration-150"
+              >
+                <Flame size={15} /> Cardio Isolado
+              </button>
+            )}
 
             {(totalMeta > 0 || metaCardioMin > 0) && (
               <AnalyticsSection
@@ -1890,14 +2387,16 @@ function WorkoutsView({ alunoId: fixedAlunoId }: WorkoutsProps) {
         {/* Modal: confirmacao antes de finalizar o treino */}
         {isStudent && finalizarConfirmOpen && sessaoAtiva && !sessaoExpirada && (() => {
           const duracaoAtual = Math.max(0, Math.floor((Date.now() - sessaoAtiva.iniciadaEm) / 1000));
-          const curto = duracaoAtual <= DURACAO_MINIMA_SEG;
+          const treinoConfirm = treinos.find(t => t.dbId === sessaoAtiva.treinoId);
+          const isSomenteCardio = treinoEhSomenteCardio(treinoConfirm);
+          const curto = duracaoAtual <= DURACAO_MINIMA_SEG && !isSomenteCardio;
           const seriesMarcadas = contarSeriesRegistradas();
           const cardiosMarcados = contarCardiosRegistrados();
           const resumoItens = [
             `${seriesMarcadas} série(s)`,
             ...(cardiosMarcados > 0 ? [`${cardiosMarcados} cardio(s)`] : []),
           ].join(' · ');
-          const treinoNome = treinos.find(t => t.dbId === sessaoAtiva.treinoId)?.nome || 'Treino';
+          const treinoNome = treinoConfirm?.nome || 'Treino';
 
           async function confirmarSalvar() {
             const ok = await handleFinalizarTreino();
@@ -2003,12 +2502,78 @@ function WorkoutsView({ alunoId: fixedAlunoId }: WorkoutsProps) {
           );
         })()}
 
+        {/* Modal: Trocar Treino de Hoje (persiste no planejamento semanal) */}
+        {isStudent && trocarTreinoModal && (() => {
+          const atualHoje = treinosDeHoje[0]?.dbId;
+          return (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={() => setTrocarTreinoModal(false)}>
+              <div className="bg-panel border border-line clip-bevel p-6 md:p-8 max-w-md w-full space-y-5 shadow-2xl" onClick={e => e.stopPropagation()}>
+                <div>
+                  <h3 className="font-display font-normal uppercase text-[20px] text-bone tracking-[0.02em]">Trocar Treino de Hoje</h3>
+                  <p className="text-[12.5px] text-muted-steel mt-1">
+                    A escolha vale para hoje e fica salva no seu planejamento semanal.
+                  </p>
+                </div>
+
+                {treinos.length === 0 ? (
+                  <p className="text-sm text-zinc-400 text-center py-4">Nenhum treino disponível na ficha.</p>
+                ) : (
+                  <div className="space-y-2 max-h-[50vh] overflow-y-auto pr-1">
+                    {treinos.map(t => {
+                      const ativo = !!t.dbId && t.dbId === atualHoje;
+                      return (
+                        <button
+                          key={t.key}
+                          onClick={() => t.dbId && void trocarTreinoDeHoje(t.dbId)}
+                          disabled={savingLog}
+                          className={`w-full flex items-center justify-between gap-3 px-4 py-3 rounded-xl border text-left transition-all disabled:opacity-50 ${
+                            ativo
+                              ? 'border-ok/50 bg-ok/10 text-zinc-100'
+                              : 'border-zinc-800 bg-zinc-950 text-zinc-300 hover:border-accent/50'
+                          }`}
+                        >
+                          <span className="flex items-center gap-2 min-w-0">
+                            {t.exercicios.length > 0 && t.exercicios.every(ex => ex.categoria === 'cardio')
+                              ? <Flame size={14} className="text-orange-400 shrink-0" />
+                              : <Dumbbell size={14} className="text-zinc-500 shrink-0" />}
+                            <span className="text-[13px] font-semibold truncate">{t.nome}</span>
+                            <span className="text-[11px] text-zinc-500 shrink-0">{t.exercicios.length} ex</span>
+                          </span>
+                          {ativo ? (
+                            <span className="text-[10px] uppercase font-bold text-ok flex items-center gap-1 shrink-0"><Check size={12} /> Hoje</span>
+                          ) : (
+                            <span className="text-[11px] text-accent-light font-semibold shrink-0">{savingLog ? 'Salvando...' : 'Escolher'}</span>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+
+                <div className="flex justify-end">
+                  <button onClick={() => setTrocarTreinoModal(false)} className="btn-steel">Fechar</button>
+                </div>
+              </div>
+            </div>
+          );
+        })()}
+
         {/* Modal Story Card 9:16 para Compartilhamento */}
         <WorkoutStoryModal
           isOpen={storyModalOpen}
           onClose={() => setStoryModalOpen(false)}
           data={storyModalData}
         />
+
+        {/* Modal Registrar Cardio Isolado (livre, fora da ficha) */}
+        {isStudent && selectedAlunoId && (
+          <CardioIsoladoModal
+            isOpen={cardioIsoladoOpen}
+            onClose={() => setCardioIsoladoOpen(false)}
+            userId={selectedAlunoId}
+            onSaved={handleRegistrarCardioIsolado}
+          />
+        )}
       </div>
     </div>
   );
@@ -2029,16 +2594,60 @@ function ClipboardListPlaceholder() {
 }
 
 // =============================================================
+// ALUNO: dia de descanso / dia sem treino (aba "Treino de Hoje")
+// =============================================================
+
+function DiaDeDescanso({ onTrocar }: { onTrocar: () => void }) {
+  return (
+    <div className="bg-panel border border-line px-5 py-10 flex flex-col items-center text-center gap-3">
+      <div className="w-14 h-14 rounded-full bg-ok/[0.08] border border-ok/25 flex items-center justify-center">
+        <Moon size={24} className="text-ok" />
+      </div>
+      <div>
+        <h3 className="text-base font-bold text-bone mb-1">Dia de Descanso</h3>
+        <p className="text-[13px] text-muted-steel max-w-sm">
+          O planejamento prevê que hoje você descanse. Aproveite para recuperar a energia e voltar amanhã!
+        </p>
+      </div>
+      <button onClick={onTrocar} className="btn-ghost text-[11px] flex items-center justify-center gap-1.5 mt-1">
+        <RotateCcw size={12} /> Trocar para um treino hoje
+      </button>
+    </div>
+  );
+}
+
+function DiaSemTreino({ onTrocar }: { onTrocar: () => void }) {
+  return (
+    <div className="bg-panel border border-line px-5 py-10 flex flex-col items-center text-center gap-3">
+      <div className="w-14 h-14 rounded-full bg-zinc-800/60 border border-zinc-700 flex items-center justify-center">
+        <Dumbbell size={24} className="text-zinc-500" />
+      </div>
+      <div>
+        <h3 className="text-base font-bold text-bone mb-1">Nenhum treino para hoje</h3>
+        <p className="text-[13px] text-muted-steel max-w-sm">
+          Ainda não há treino alocado para hoje no planejamento. Escolha um treino da sua ficha para a sessão de hoje.
+        </p>
+      </div>
+      <button onClick={onTrocar} className="btn-forge text-xs flex items-center justify-center gap-1.5 mt-1">
+        <RotateCcw size={12} /> Escolher Treino de Hoje
+      </button>
+    </div>
+  );
+}
+
+// =============================================================
 // FORM CRIAR FICHA (nome pré-preenchido, editável)
 // =============================================================
 
 function CriarFichaForm({ nomeInicial, saving, onConfirm, onCancel }: {
   nomeInicial: string;
   saving: boolean;
-  onConfirm: () => void;
+  onConfirm: (payload: NovaFichaPayload) => void;
   onCancel: () => void;
 }) {
   const [nome, setNome] = useState(nomeInicial);
+
+  const podeConfirmar = nome.trim() !== '' && !saving;
 
   return (
     <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4 md:p-6 space-y-4">
@@ -2064,11 +2673,104 @@ function CriarFichaForm({ nomeInicial, saving, onConfirm, onCancel }: {
       </div>
 
       <button
-        onClick={onConfirm}
-        disabled={!nome.trim() || saving}
+        onClick={() => onConfirm({ nome: nome.trim() })}
+        disabled={!podeConfirmar}
         className="btn-forge"
       >
         {saving ? 'Criando...' : 'Criar Ficha'}
+      </button>
+    </div>
+  );
+}
+
+// =============================================================
+// INLINE: ADICIONAR TREINO DE CARDIO ISOLADO
+// =============================================================
+
+function CardioTreinoForm({ nomesExistentes, saving, onConfirm, onCancel }: {
+  nomesExistentes: string[];
+  saving: boolean;
+  onConfirm: (payload: CardioTreinoPayload) => void;
+  onCancel: () => void;
+}) {
+  const [nome, setNome] = useState('');
+  const [modalidade, setModalidade] = useState(MODALIDADES_CARDIO[0]);
+  const [metaMin, setMetaMin] = useState(25);
+  const [metaKm, setMetaKm] = useState('');
+
+  const duplicado = nome.trim() !== '' && nomesExistentes.some(n => n.trim().toLowerCase() === nome.trim().toLowerCase());
+  const podeConfirmar = nome.trim() !== '' && !duplicado && metaMin > 0 && !saving;
+
+  return (
+    <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4 md:p-6 space-y-4">
+      <div className="flex items-center justify-between">
+        <h3 className="text-xs font-semibold text-zinc-400 uppercase tracking-[0.15em] flex items-center gap-2">
+          <Flame size={13} className="text-orange-400" />
+          Treino de Cardio Isolado
+        </h3>
+        <button onClick={onCancel} className="btn-ghost">Cancelar</button>
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div>
+          <label className="text-[10px] text-zinc-500 uppercase tracking-[0.15em] font-semibold block mb-1.5">Nome do Treino</label>
+          <input
+            type="text"
+            value={nome}
+            onChange={e => setNome(e.target.value)}
+            placeholder="Ex: Cardio A"
+            autoFocus
+            className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-3 text-sm text-zinc-100 placeholder-zinc-600 focus:outline-none focus:border-accent focus:ring-2 focus:ring-accent/10 transition-all duration-150"
+          />
+          {duplicado && (
+            <p className="text-[11px] text-red-400 mt-1.5">Já existe um treino com esse nome nesta ficha.</p>
+          )}
+        </div>
+        <div>
+          <label className="text-[10px] text-zinc-500 uppercase tracking-[0.15em] font-semibold block mb-1.5">Modalidade</label>
+          <select
+            value={modalidade}
+            onChange={e => setModalidade(e.target.value)}
+            className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-3 text-sm text-zinc-100 focus:outline-none focus:border-accent focus:ring-2 focus:ring-accent/10 transition-all duration-150"
+          >
+            {MODALIDADES_CARDIO.map(m => <option key={m} value={m}>{m}</option>)}
+          </select>
+        </div>
+        <div>
+          <label className="text-[10px] text-zinc-500 uppercase tracking-[0.15em] font-semibold block mb-1.5">Meta de Duração (min)</label>
+          <input
+            type="number"
+            min={1}
+            value={metaMin}
+            onChange={e => setMetaMin(Number(e.target.value))}
+            className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-3 text-sm text-zinc-100 focus:outline-none focus:border-accent focus:ring-2 focus:ring-accent/10 transition-all duration-150"
+          />
+        </div>
+        <div>
+          <label className="text-[10px] text-zinc-500 uppercase tracking-[0.15em] font-semibold block mb-1.5">Meta de Distância (km, opcional)</label>
+          <input
+            type="number"
+            min={0}
+            step="0.1"
+            value={metaKm}
+            onChange={e => setMetaKm(e.target.value)}
+            placeholder="Ex: 5"
+            className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-3 text-sm text-zinc-100 placeholder-zinc-600 focus:outline-none focus:border-accent focus:ring-2 focus:ring-accent/10 transition-all duration-150"
+          />
+        </div>
+      </div>
+
+      <p className="text-[11px] text-zinc-600">
+        Cria um treino de <strong className="text-zinc-400">cardio isolado</strong> dentro da ficha atual (não cria outra ficha).
+        O aluno informa tempo/distância e finaliza. Depois é só distribuí-lo no calendário semanal.
+      </p>
+
+      <button
+        onClick={() => onConfirm({ nome: nome.trim(), modalidade: modalidade.trim(), metaMin, metaKm })}
+        disabled={!podeConfirmar}
+        className="btn-forge"
+      >
+        {saving ? 'Criando...' : 'Adicionar Cardio Isolado'}
       </button>
     </div>
   );
@@ -2158,6 +2860,238 @@ function AddTreinoInline({
 }
 
 // =============================================================
+// BOTAO: NOVA PERIODIZACAO (gestor)
+// =============================================================
+
+function NovaPeriodizacaoButton({ onCriar, saving }: {
+  onCriar: (nome: string) => Promise<{ ok: boolean; erro?: string }>;
+  saving: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const [nome, setNome] = useState('');
+  const [erro, setErro] = useState<string | null>(null);
+  const [criando, setCriando] = useState(false);
+
+  async function handleConfirm() {
+    const n = nome.trim();
+    if (!n) { setErro('Digite o nome da periodização.'); return; }
+    setCriando(true);
+    const res = await onCriar(n);
+    setCriando(false);
+    if (!res.ok) { setErro(res.erro || 'Erro ao criar periodização.'); return; }
+    setNome('');
+    setErro(null);
+    setOpen(false);
+  }
+
+  if (!open) {
+    return (
+      <button
+        onClick={() => { setOpen(true); setErro(null); }}
+        disabled={saving}
+        className="btn-steel"
+      >
+        <Layers size={14} /> Nova Periodização
+      </button>
+    );
+  }
+
+  return (
+    <div className="flex items-center gap-2 bg-zinc-900 border border-zinc-800 rounded-xl px-2 py-1">
+      <input
+        type="text"
+        value={nome}
+        onChange={e => { setNome(e.target.value); if (erro) setErro(null); }}
+        onKeyDown={e => { if (e.key === 'Enter') void handleConfirm(); if (e.key === 'Escape') setOpen(false); }}
+        placeholder="Ex: High Volume"
+        autoFocus
+        className="bg-zinc-950 border border-zinc-800 rounded-lg px-2.5 py-1.5 text-sm text-zinc-100 placeholder-zinc-600 focus:outline-none focus:border-accent min-w-[130px]"
+      />
+      <button onClick={() => void handleConfirm()} disabled={!nome.trim() || criando} className="btn-forge !h-[34px] px-3 text-[12px] flex items-center gap-1">
+        <Check size={12} /> {criando ? '...' : 'Criar'}
+      </button>
+      <button onClick={() => setOpen(false)} className="btn-steel !h-[34px] px-2 text-[12px]">Cancelar</button>
+      {erro && <span className="text-[11px] text-red-400 max-w-[160px]">{erro}</span>}
+    </div>
+  );
+}
+
+// =============================================================
+// PLANIFICADOR DE PERIODIZACOES (gestor)
+// Agrupa os treinos por periodizacao (abas + lista da selecionada).
+// =============================================================
+
+function PlanificadorPeriodizacoesUI({
+  periodizacoes,
+  treinos,
+  periodizacaoSelecionada,
+  onSelectPeriodizacao,
+  onExcluirPeriodizacao,
+  expandedTreino,
+  onToggleTreino,
+  onDeleteTreino,
+  onUpdateNomeTreino,
+  addExTreinoKey,
+  onToggleAdd,
+  editExState,
+  onToggleEditExercicio,
+  onEditExercicio,
+  onMoverExercicio,
+  onUpdateObservacoes,
+  onAddExercicio,
+  onDeleteExercicio,
+  onDuplicarTreino,
+  onAddTreino,
+}: {
+  periodizacoes: Periodizacao[];
+  treinos: TreinoUI[];
+  periodizacaoSelecionada: string;
+  onSelectPeriodizacao: (id: string) => void;
+  onExcluirPeriodizacao: (id: string) => Promise<{ ok: boolean; erro?: string }>;
+  expandedTreino: string | null;
+  onToggleTreino: (key: string) => void;
+  onDeleteTreino: (key: string) => void;
+  onUpdateNomeTreino: (key: string, nome: string) => { ok: boolean; erro?: string };
+  addExTreinoKey: string | null;
+  onToggleAdd: (key: string) => void;
+  editExState: { treinoKey: string; ex: ExercicioUI } | null;
+  onToggleEditExercicio: (treinoKey: string, ex: ExercicioUI) => void;
+  onEditExercicio: (treinoKey: string, ex: ExercicioUI) => void;
+  onMoverExercicio: (treinoKey: string, idx: number, direcao: -1 | 1) => void;
+  onUpdateObservacoes: (treinoKey: string, obs: string) => void;
+  onAddExercicio: (treinoKey: string, ex: ExercicioUI) => void;
+  onDeleteExercicio: (treinoKey: string, exKey: string) => void;
+  onDuplicarTreino: (treinoKey: string, periodizacaoAlvoId: string) => Promise<{ ok: boolean; erro?: string }>;
+  onAddTreino: (nome: string) => { ok: boolean; erro?: string } | void;
+}) {
+  const [confirmDelete, setConfirmDelete] = useState<Periodizacao | null>(null);
+  const [excluindo, setExcluindo] = useState(false);
+
+  const periodizacaoAtiva = periodizacoes.find(p => p.id === periodizacaoSelecionada) || periodizacoes[0] || null;
+
+  const treinosDaSelecionada = useMemo(
+    () => treinos.filter(t => t.periodizacaoId === periodizacaoAtiva?.id),
+    [treinos, periodizacaoAtiva]
+  );
+
+  async function confirmarExclusao() {
+    if (!confirmDelete) return;
+    setExcluindo(true);
+    const res = await onExcluirPeriodizacao(confirmDelete.id);
+    setExcluindo(false);
+    if (res.ok) setConfirmDelete(null);
+  }
+
+  if (periodizacoes.length === 0) {
+    return (
+      <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-8 text-center space-y-2">
+        <p className="text-sm text-zinc-400">Nenhuma periodização cadastrada nesta ficha.</p>
+        <p className="text-xs text-zinc-600">Use o botão "Nova Periodização" acima para criar variações de volume, ex.: High Volume, Low Volume.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      {/* Abas / chips de periodizacoes */}
+      <div className="flex flex-wrap items-center gap-2">
+        {periodizacoes.map(p => {
+          const ativo = p.id === periodizacaoAtiva?.id;
+          const qtd = treinos.filter(t => t.periodizacaoId === p.id).length;
+          return (
+            <div
+              key={p.id}
+              className={`group flex items-center gap-1.5 clip-bevel-sm border px-3 py-1.5 transition-colors cursor-pointer ${
+                ativo
+                  ? 'border-accent bg-accent/15 text-accent-light'
+                  : 'border-line bg-panel-2 text-zinc-300 hover:border-accent/40'
+              }`}
+              onClick={() => onSelectPeriodizacao(p.id)}
+              title={ativo ? 'Periodização ativa' : `Ver "${p.nome}"`}
+            >
+              <Layers size={12} className="shrink-0" />
+              <span className="text-xs font-bold">{p.nome}</span>
+              <span className="text-[10px] text-muted-steel">{qtd}</span>
+              {periodizacoes.length > 1 && (
+                <button
+                  onClick={(e) => { e.stopPropagation(); setConfirmDelete(p); }}
+                  className="ml-1 p-0.5 text-muted-steel hover:text-red-400 transition-colors opacity-0 group-hover:opacity-100"
+                  title="Excluir periodização e seus treinos"
+                >
+                  <X size={12} />
+                </button>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Lista de treinos da periodizacao selecionada */}
+      <div className="space-y-3">
+        {treinosDaSelecionada.length === 0 ? (
+          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-8 text-center">
+            <p className="text-sm text-zinc-400">
+              {periodizacaoAtiva ? `"${periodizacaoAtiva.nome}"` : 'Esta periodização'} ainda não tem treinos.
+            </p>
+            <p className="text-xs text-zinc-600 mt-1">Adicione um treino abaixo ou use "Duplicar para..." em outro treino.</p>
+          </div>
+        ) : (
+          treinosDaSelecionada.map(t => {
+            const nomesExistentesPid = treinosDaSelecionada.map(x => x.nome);
+            return (
+              <TreinoEditorCard
+                key={t.key}
+                treino={t}
+                nomesExistentes={nomesExistentesPid}
+                expanded={expandedTreino === t.key}
+                onToggle={() => onToggleTreino(t.key)}
+                onDelete={() => onDeleteTreino(t.key)}
+                onUpdateNome={(novoNome) => onUpdateNomeTreino(t.key, novoNome)}
+                addOpen={addExTreinoKey === t.key}
+                onToggleAdd={() => onToggleAdd(t.key)}
+                editEx={editExState && editExState.treinoKey === t.key ? editExState.ex : null}
+                onToggleEdit={(ex) => onToggleEditExercicio(t.key, ex)}
+                onEditExercicio={(ex) => onEditExercicio(t.key, ex)}
+                onMoverExercicio={(idx, dir) => onMoverExercicio(t.key, idx, dir)}
+                onUpdateObservacoes={(obs) => onUpdateObservacoes(t.key, obs)}
+                onAddExercicio={(ex) => onAddExercicio(t.key, ex)}
+                onDeleteExercicio={(exKey) => onDeleteExercicio(t.key, exKey)}
+                periodizacoesAlvo={periodizacoes.filter(p => p.id !== t.periodizacaoId)}
+                onDuplicar={(pid) => onDuplicarTreino(t.key, pid)}
+              />
+            );
+          })
+        )}
+
+        <AddTreinoInline nomesExistentes={treinosDaSelecionada.map(x => x.nome)} onAdd={onAddTreino} />
+      </div>
+
+      {/* Modal de confirmacao de exclusao de periodizacao */}
+      {confirmDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm px-4">
+          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 max-w-md w-full space-y-4 shadow-2xl">
+            <h3 className="text-sm font-bold text-zinc-100 flex items-center gap-2">
+              <Trash2 size={16} className="text-red-400" /> Excluir periodização "{confirmDelete.nome}"?
+            </h3>
+            <p className="text-xs text-zinc-500 leading-relaxed">
+              Todos os treinos desta periodização (e seus exercícios) serão removidos permanentemente.
+              Os treinos já alocados no planejamento semanal do aluno serão desfeitos.
+            </p>
+            <div className="flex items-center justify-end gap-2">
+              <button onClick={() => setConfirmDelete(null)} className="btn-steel">Cancelar</button>
+              <button onClick={() => void confirmarExclusao()} disabled={excluindo} className="btn-danger flex items-center gap-1">
+                {excluindo ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
+                {excluindo ? 'Excluindo...' : 'Excluir'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// =============================================================
 // CARD EDITOR DE TREINO (gestor)
 // =============================================================
 
@@ -2177,6 +3111,8 @@ function TreinoEditorCard({
   onUpdateObservacoes,
   onAddExercicio,
   onDeleteExercicio,
+  periodizacoesAlvo = [],
+  onDuplicar,
 }: {
   treino: TreinoUI;
   expanded: boolean;
@@ -2193,10 +3129,14 @@ function TreinoEditorCard({
   onUpdateObservacoes: (obs: string) => void;
   onAddExercicio: (ex: ExercicioUI) => void;
   onDeleteExercicio: (exKey: string) => void;
+  periodizacoesAlvo?: Periodizacao[];
+  onDuplicar?: (periodizacaoAlvoId: string) => Promise<{ ok: boolean; erro?: string }>;
 }) {
   const [editingNome, setEditingNome] = useState(false);
   const [nomeTemp, setNomeTemp] = useState(treino.nome);
   const [erroNome, setErroNome] = useState<string | null>(null);
+  const [duplicarOpen, setDuplicarOpen] = useState(false);
+  const [duplicandoPid, setDuplicandoPid] = useState<string | null>(null);
   const totalSeries = treino.exercicios.reduce((sum, ex) => sum + ex.series, 0);
 
   function handleStartEditNome(e: React.MouseEvent) {
@@ -2290,6 +3230,11 @@ function TreinoEditorCard({
             ) : (
               <div className="flex items-center gap-2">
                 <h3 className="text-sm font-bold text-zinc-100 truncate">{treino.nome}</h3>
+                {treinoEhSomenteCardio(treino) && (
+                  <span className="inline-flex items-center gap-1 font-display text-[9px] uppercase tracking-[0.1em] text-orange-300 border border-orange-400/40 bg-orange-400/[0.08] px-1.5 py-0.5 clip-bevel-sm shrink-0">
+                    <Flame size={9} /> Cardio Isolado
+                  </span>
+                )}
                 <button
                   type="button"
                   onClick={handleStartEditNome}
@@ -2308,6 +3253,41 @@ function TreinoEditorCard({
           </div>
         </div>
         <div className="flex items-center gap-1 ml-2 shrink-0" onClick={e => e.stopPropagation()}>
+          <div className="relative">
+            <button
+              onClick={() => setDuplicarOpen(o => !o)}
+              disabled={periodizacoesAlvo.length === 0}
+              className={`text-zinc-500 hover:text-accent-light p-1.5 rounded-lg hover:bg-accent/10 transition-all duration-150 ${periodizacoesAlvo.length === 0 ? 'opacity-40 cursor-not-allowed' : ''}`}
+              title={periodizacoesAlvo.length === 0 ? 'Não há outra periodização para duplicar' : 'Duplicar para outra periodização'}
+            >
+              <Copy size={14} />
+            </button>
+            {duplicarOpen && (
+              <div className="absolute right-0 top-9 z-30 min-w-[180px] bg-zinc-900 border border-zinc-700 rounded-xl shadow-2xl shadow-black/50 p-1.5 space-y-0.5">
+                <p className="text-[10px] uppercase tracking-wider text-zinc-500 px-2 pt-1 pb-1.5">Duplicar para...</p>
+                {periodizacoesAlvo.map(p => (
+                  <button
+                    key={p.id}
+                    disabled={duplicandoPid !== null}
+                    onClick={async () => {
+                      setDuplicandoPid(p.id);
+                      const res = await onDuplicar?.(p.id);
+                      setDuplicandoPid(null);
+                      if (res?.ok) setDuplicarOpen(false);
+                    }}
+                    className="w-full flex items-center gap-2 px-2 py-1.5 text-left text-xs text-zinc-200 hover:bg-zinc-800 rounded-lg transition-colors disabled:opacity-50"
+                  >
+                    <Layers size={12} className="text-accent shrink-0" />
+                    {duplicandoPid === p.id ? <Loader2 size={12} className="animate-spin" /> : null}
+                    <span className="truncate">{p.nome}</span>
+                  </button>
+                ))}
+                <button onClick={() => setDuplicarOpen(false)} className="w-full text-left px-2 py-1 text-xs text-muted-steel hover:text-zinc-200 rounded-lg transition-colors">
+                  Cancelar
+                </button>
+              </div>
+            )}
+          </div>
           <button onClick={onDelete} className="text-zinc-500 hover:text-red-400 p-1.5 rounded-lg hover:bg-red-500/10 transition-all duration-150" title="Remover treino">
             <Trash2 size={14} />
           </button>
@@ -2449,6 +3429,7 @@ function ExercicioInlineForm({ initial, confirmLabel, onConfirm, onCancel }: {
   const [metaDistancia, setMetaDistancia] = useState<string>(
     initial?.metaDistanciaKm && initial.metaDistanciaKm > 0 ? String(initial.metaDistanciaKm) : ''
   );
+  const [erro, setErro] = useState<string | null>(null);
 
   const isCardio = categoria === 'cardio';
   const porcoes = microsDe(principal);
@@ -2470,9 +3451,16 @@ function ExercicioInlineForm({ initial, confirmLabel, onConfirm, onCancel }: {
   }
 
   function handleConfirm() {
+    setErro(null);
     if (!nome.trim()) return;
     const tempoMin = isCardio ? Math.max(0, Math.round(Number(metaTempo) || 0)) : null;
     if (isCardio && (!tempoMin || tempoMin <= 0)) return;
+    // Pelo menos uma série precisa ser principal (válida): um exercício com
+    // todas as séries como aquecimento nunca contabiliza trabalho real.
+    if (!isCardio && aqArr.slice(0, numSeries).every(Boolean)) {
+      setErro('Ao menos uma série precisa ser principal (desmarque "Aq" de uma das séries).');
+      return;
+    }
     const distKm = isCardio && metaDistancia.trim()
       ? Number(metaDistancia.replace(',', '.')) || null
       : null;
@@ -2594,6 +3582,11 @@ function ExercicioInlineForm({ initial, confirmLabel, onConfirm, onCancel }: {
           </div>
         </>
       )}
+      {erro && (
+        <p className="text-[11px] font-semibold text-red-400 bg-red-500/10 border border-red-500/25 px-2.5 py-1.5 clip-bevel-sm">
+          {erro}
+        </p>
+      )}
       <div className="flex gap-2">
         <button onClick={handleConfirm} disabled={!nome.trim() || (isCardio && (!metaTempo || Number(metaTempo) <= 0))} className="btn-forge !h-[40px] px-4 text-[12px] flex items-center gap-1">
           <Check size={12} /> {confirmLabel || 'Adicionar'}
@@ -2609,6 +3602,30 @@ function ExercicioInlineForm({ initial, confirmLabel, onConfirm, onCancel }: {
 // =============================================================
 // CONTROLES DE SESSAO DO TREINO (aluno, dentro do card do treino)
 // =============================================================
+
+// Relogio com tick local de 1s: re-renderiza apenas o conteudo que exibe o
+// tempo, evitando re-renderizar a pagina inteira a cada segundo.
+function RelogioSessao({ iniciadaEm, children }: { iniciadaEm: number; children: (elapsedSegundos: number) => ReactElement }) {
+  const [agora, setAgora] = useState<number>(() => Date.now());
+
+  useEffect(() => {
+    setAgora(Date.now());
+    const id = setInterval(() => setAgora(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, [iniciadaEm]);
+
+  // Mobile pausa timers com a aba em background; ao voltar, sincroniza na hora
+  useEffect(() => {
+    const aoVoltar = () => {
+      if (document.visibilityState === 'visible') setAgora(Date.now());
+    };
+    document.addEventListener('visibilitychange', aoVoltar);
+    return () => document.removeEventListener('visibilitychange', aoVoltar);
+  }, []);
+
+  const elapsed = Math.max(0, Math.floor((agora - iniciadaEm) / 1000));
+  return children(Math.min(DURACAO_MAX_SEG, elapsed));
+}
 
 function SessaoControles({ ativa, bloqueado, nomeOutro, concluidoSemana, elapsedSegundos, saving, destacado, onIniciar, onFinalizar }: {
   ativa: boolean;
@@ -2716,7 +3733,7 @@ function ExercicioExecucaoCard({
         <button
           type="button"
           onClick={() => hasValidInputs && onStatusChange(idx, { valida: true, isWarmup: false })}
-          disabled={disabled || isAquecimento || !hasValidInputs}
+          disabled={disabled || !hasValidInputs}
           aria-pressed={isValida}
           title={hasValidInputs ? 'Marcar como série principal (válida)' : 'Preencha carga e repetições antes de marcar'}
           className={`inline-flex items-center gap-1 px-2 py-1 text-[11px] font-medium rounded transition-colors ${

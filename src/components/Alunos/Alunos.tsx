@@ -6,6 +6,7 @@ import {
   Clock, Dumbbell, Trash2, Shield, FolderOpen,
   LayoutDashboard, User
 } from 'lucide-react';
+import StudentAvatar from '../ui/StudentAvatar';
 import { usuarios, auth } from '../../services/api';
 import ResumoCompletoModal from './ResumoCompletoModal';
 import type { Usuario } from '../../types';
@@ -46,8 +47,26 @@ export default function Alunos() {
   async function handleExcluir(aluno: Usuario) {
     if (!confirm(`Excluir ${aluno.nome} permanentemente? Esta acao nao pode ser desfeita.`)) return;
     if (!confirm('Tem certeza? O aluno perdera todos os dados.')) return;
-    await usuarios.delete(aluno.id);
-    loadAlunos();
+    try {
+      await usuarios.delete(aluno.id);
+      loadAlunos();
+    } catch (e) {
+      console.error('[Alunos] Falha ao excluir aluno:', e);
+      setError('Falha ao excluir o aluno. Tente novamente.');
+    }
+  }
+
+  async function handleToggleStatus(aluno: Usuario) {
+    const novoStatus = aluno.status === 'inativo' ? 'ativo' : 'inativo';
+    const acao = novoStatus === 'inativo' ? 'inativar' : 'reativar';
+    if (!confirm(`Deseja ${acao} o aluno ${aluno.nome}?`)) return;
+    try {
+      await usuarios.update(aluno.id, { status: novoStatus });
+      loadAlunos();
+    } catch (e) {
+      console.error('[Alunos] Falha ao alterar status:', e);
+      setError(`Falha ao ${acao} o aluno. Tente novamente.`);
+    }
   }
 
   return (
@@ -151,6 +170,7 @@ export default function Alunos() {
                       aluno={aluno}
                       onExcluir={() => handleExcluir(aluno)}
                       onResumo={() => setResumoAluno(aluno)}
+                      onToggleStatus={() => handleToggleStatus(aluno)}
                     />
                   ))}
                 </div>
@@ -164,7 +184,12 @@ export default function Alunos() {
                 </p>
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                   {inativos.map(aluno => (
-                    <AlunoCard key={aluno.id} aluno={aluno} onExcluir={() => handleExcluir(aluno)} />
+                    <AlunoCard
+                      key={aluno.id}
+                      aluno={aluno}
+                      onExcluir={() => handleExcluir(aluno)}
+                      onToggleStatus={() => handleToggleStatus(aluno)}
+                    />
                   ))}
                 </div>
               </section>
@@ -181,10 +206,11 @@ export default function Alunos() {
   );
 }
 
-function AlunoCard({ aluno, onExcluir, onResumo }: {
+function AlunoCard({ aluno, onExcluir, onResumo, onToggleStatus }: {
   aluno: Usuario;
   onExcluir?: () => void;
   onResumo?: () => void;
+  onToggleStatus?: () => void;
 }) {
   const navigate = useNavigate();
   const isPendente = aluno.status === 'pendente';
@@ -197,15 +223,17 @@ function AlunoCard({ aluno, onExcluir, onResumo }: {
     }`}>
       <div className="flex items-start justify-between mb-3 gap-2">
         <div className="flex items-center gap-3 min-w-0">
-          <div className={`w-10 h-10 flex-none flex items-center justify-center border text-sm font-bold ${
-            isPendente
-              ? 'clip-bevel-sm bg-amber-500/10 border-amber-500/30 text-amber-400'
-              : isInativo
-              ? 'clip-bevel-sm bg-panel-2 border-line text-muted-steel'
-              : 'clip-bevel-sm bg-gradient-to-br from-accent-light to-plate border-transparent shadow-[inset_0_1px_0_rgba(255,255,255,0.4)] text-[#170B04]'
-          }`}>
-            {aluno.nome.charAt(0).toUpperCase()}
-          </div>
+          {isPendente ? (
+            <div className="w-10 h-10 flex-none flex items-center justify-center border clip-bevel-sm bg-amber-500/10 border-amber-500/30 text-sm font-bold text-amber-400">
+              {aluno.nome.charAt(0).toUpperCase()}
+            </div>
+          ) : isInativo ? (
+            <div className="w-10 h-10 flex-none flex items-center justify-center border clip-bevel-sm bg-panel-2 border-line text-sm font-bold text-muted-steel">
+              {aluno.nome.charAt(0).toUpperCase()}
+            </div>
+          ) : (
+            <StudentAvatar size="md" />
+          )}
           <div className="min-w-0">
             <h3 className="text-sm font-semibold text-bone truncate">{aluno.nome}</h3>
             <p className="text-[11px] text-muted-steel flex items-center gap-1 truncate">
@@ -257,6 +285,19 @@ function AlunoCard({ aluno, onExcluir, onResumo }: {
             title="Ver resumo completo do aluno"
           >
             <LayoutDashboard size={13} /> Resumo
+          </button>
+        )}
+        {onToggleStatus && (
+          <button
+            onClick={onToggleStatus}
+            className={`flex items-center justify-center px-3 border clip-bevel-sm transition-colors duration-150 ${
+              isInativo
+                ? 'bg-ok/5 hover:bg-ok/15 text-ok border-ok/30'
+                : 'bg-panel-2 hover:bg-panel text-muted-steel hover:text-amber-400 border-line'
+            }`}
+            title={isInativo ? 'Reativar aluno' : 'Inativar aluno'}
+          >
+            {isInativo ? <Check size={13} /> : <AlertCircle size={13} />}
           </button>
         )}
         {onExcluir && (
@@ -323,7 +364,7 @@ function FormularioCadastro({ onCreated, onCancel }: {
         frontendUrl: window.location.origin,
       });
 
-      setSuccess(`Aluno ${nome.trim()} cadastrado com sucesso no Firebase!`);
+      setSuccess(`Aluno ${nome.trim()} cadastrado com sucesso!`);
       setTimeout(() => onCreated(), 1500);
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Erro ao cadastrar aluno';

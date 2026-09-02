@@ -80,8 +80,11 @@
     v_descanso boolean;
     v_ordem int;
   BEGIN
-    IF NOT public.is_gestor() THEN
-      RAISE EXCEPTION 'Apenas gestores podem salvar o planejamento';
+    IF NOT public.is_gestor() AND NOT EXISTS (
+      SELECT 1 FROM public.usuarios u
+      WHERE u.id = p_user_id AND u.auth_id = auth.uid()
+    ) THEN
+      RAISE EXCEPTION 'Apenas o gestor ou o proprio aluno podem salvar o planejamento';
     END IF;
 
     IF p_user_id IS NULL OR NOT EXISTS (SELECT 1 FROM public.usuarios u WHERE u.id = p_user_id) THEN

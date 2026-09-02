@@ -2,7 +2,7 @@ import type { CapacitorConfig } from '@capacitor/cli';
 
 const config: CapacitorConfig = {
   appId: 'com.fitnessapp.training',
-  appName: 'FitnessApp',
+  appName: 'LOS GYM',
   webDir: 'dist',
   bundledWebRuntime: false,
   server: {

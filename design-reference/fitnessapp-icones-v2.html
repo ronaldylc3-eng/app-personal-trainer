@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<title>FitnessApp — Ícones Treino &amp; Dieta</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Anton&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#0A0A0B;--surface:#151517;--surface-2:#1C1C20;--surface-3:#212126;
+    --line:#28282D;--text:#F3F2EF;--muted:#8E8E96;
+    --accent:#FF5A1F;--accent-2:#FF7A3D;--accent-dark:#8A2A0A;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--bg);font-family:'Inter',sans-serif;color:var(--text);padding:48px 32px 80px;}
+  .wrap{max-width:1100px;margin:0 auto;}
+  h1{font-family:'Anton',sans-serif;font-weight:400;text-transform:uppercase;font-size:26px;margin:0 0 6px;}
+  .sub{color:var(--muted);font-size:14px;margin:0 0 40px;max-width:600px;line-height:1.55;}
+
+  .section-label{
+    font-family:'Anton',sans-serif;font-size:12px;letter-spacing:.12em;color:var(--accent-2);
+    display:flex;align-items:center;gap:10px;margin:0 0 18px;text-transform:uppercase;
+  }
+  .section-label::after{content:"";flex:1;height:1px;background:var(--line);}
+
+  .row{display:flex;gap:20px;flex-wrap:wrap;margin-bottom:52px;}
+  .opt{
+    background:var(--surface);border:1px solid var(--line);padding:22px 20px;
+    width:170px;display:flex;flex-direction:column;align-items:center;gap:14px;text-align:center;
+  }
+  .opt-tag{font-size:10px;font-weight:800;letter-spacing:.08em;color:var(--muted);text-transform:uppercase;}
+  .opt-tag.reco{color:var(--accent-2);}
+
+  /* ===== BADGE BASE (tamanho grande p/ vitrine) ===== */
+  .badge{
+    width:64px;height:64px;flex:none;position:relative;
+    clip-path:polygon(12px 0,100% 0,100% calc(100% - 12px),calc(100% - 12px) 100%,0 100%,0 12px);
+    display:flex;align-items:center;justify-content:center;
+  }
+  .badge svg{width:28px;height:28px;}
+
+  /* Estilo A — sólido laranja (o que já existe hoje, referência) */
+  .badge.style-solid{
+    background:linear-gradient(160deg,var(--accent-2),var(--accent-dark));
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.4);
+  }
+  .badge.style-solid svg{stroke:#170B04;}
+
+  /* Estilo B — vidro/contorno (novo, mais discreto/corporativo) */
+  .badge.style-glass{
+    background:var(--surface-3);
+    border:1px solid rgba(255,90,31,.4);
+    box-shadow:inset 0 0 0 1px rgba(255,255,255,.03), 0 0 24px -8px rgba(255,90,31,.25);
+  }
+  .badge.style-glass::before{
+    content:"";position:absolute;inset:0;
+    background:radial-gradient(circle at 30% 20%, rgba(255,90,31,.18), transparent 65%);
+    clip-path:inherit;pointer-events:none;
+  }
+  .badge.style-glass svg{stroke:var(--accent-2);position:relative;z-index:1;}
+
+  /* Estilo C — chapa escura com aresta laranja fina (mais "enterprise") */
+  .badge.style-plate{
+    background:linear-gradient(155deg,#232327,#151517);
+    border:1px solid var(--line);
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.05);
+  }
+  .badge.style-plate::after{
+    content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--accent);
+  }
+  .badge.style-plate svg{stroke:var(--accent-2);}
+
+  .compare-note{font-size:12px;color:var(--muted);line-height:1.5;}
+
+  /* ===== APLICAÇÃO EM CONTEXTO (tamanhos reais do app) ===== */
+  .context-block{display:flex;gap:40px;flex-wrap:wrap;align-items:flex-start;margin-top:8px;}
+  .context-card{background:var(--surface);border:1px solid var(--line);padding:24px;display:flex;flex-direction:column;gap:20px;min-width:260px;}
+  .ctx-row{display:flex;align-items:center;gap:13px;}
+  .badge-sm{
+    width:42px;height:42px;flex:none;position:relative;
+    clip-path:polygon(9px 0,100% 0,100% calc(100% - 9px),calc(100% - 9px) 100%,0 100%,0 9px);
+    display:flex;align-items:center;justify-content:center;
+    background:var(--surface-3);border:1px solid rgba(255,90,31,.4);
+  }
+  .badge-sm::before{content:"";position:absolute;inset:0;background:radial-gradient(circle at 30% 20%, rgba(255,90,31,.2), transparent 65%);clip-path:inherit;}
+  .badge-sm svg{width:19px;height:19px;stroke:var(--accent-2);position:relative;z-index:1;}
+  .ctx-text b{font-size:15px;display:block;}
+  .ctx-text span{font-size:12px;color:var(--muted);}
+
+  .note-box{
+    background:var(--surface);border:1px solid var(--line);border-left:3px solid var(--accent);
+    padding:18px 20px;font-size:13.5px;color:var(--muted);line-height:1.6;margin-top:8px;
+  }
+  .note-box b{color:var(--text);}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Ícones de Treino &amp; Dieta — v2</h1>
+  <p class="sub">Troquei o haltere cruzado e a maçã (os símbolos mais "clichê" de app fitness) por glifos um pouco mais específicos, e testei 3 tratamentos de fundo — do mais parecido com o que você já tem até um mais discreto/corporativo.</p>
+
+  <!-- TREINO -->
+  <p class="section-label">TREINO — OPÇÕES DE ÍCONE</p>
+  <div class="row">
+    <div class="opt">
+      <span class="opt-tag">ATUAL (referência)</span>
+      <div class="badge style-solid">
+        <svg viewBox="0 0 24 24" fill="none" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12h2M18 12h2M6 8v8M18 8v8M8 12h8"/></svg>
+      </div>
+      <p class="compare-note">Haltere cruzado — o ícone mais usado em todo app de treino, pouco distintivo.</p>
+    </div>
+
+    <div class="opt">
+      <span class="opt-tag reco">NOVO · BARRA OLÍMPICA</span>
+      <div class="badge style-glass">
+        <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="10.5" width="3" height="3"/><rect x="6" y="9" width="2.5" height="6"/><rect x="15.5" y="9" width="2.5" height="6"/><rect x="19" y="10.5" width="3" height="3"/><line x1="8.5" y1="12" x2="15.5" y2="12"/></svg>
+      </div>
+      <p class="compare-note">Barra com anilhas, vista de perfil — lê como "treino" sem ser o clichê do haltere.</p>
+    </div>
+
+    <div class="opt">
+      <span class="opt-tag">NOVO · PULSO DE ESFORÇO</span>
+      <div class="badge style-glass">
+        <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12h4l2 6 3-12 2 8 2-4h7"/></svg>
+      </div>
+      <p class="compare-note">Linha de "pulso/esforço" — remete a performance e progresso, mais abstrato/premium.</p>
+    </div>
+
+    <div class="opt">
+      <span class="opt-tag">NOVO · DISCOS EMPILHADOS</span>
+      <div class="badge style-glass">
+        <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="6" rx="7" ry="2.4"/><path d="M5 6v6c0 1.3 3.1 2.4 7 2.4s7-1.1 7-2.4V6"/><path d="M5 12v6c0 1.3 3.1 2.4 7 2.4s7-1.1 7-2.4v-6"/></ellipse></svg>
+      </div>
+      <p class="compare-note">Pilha de anilhas — remete a carga/progressão, ícone menos comum mas ainda óbvio.</p>
+    </div>
+  </div>
+
+  <!-- DIETA -->
+  <p class="section-label">DIETA — OPÇÕES DE ÍCONE</p>
+  <div class="row">
+    <div class="opt">
+      <span class="opt-tag">ATUAL (referência)</span>
+      <div class="badge style-solid">
+        <svg viewBox="0 0 24 24" fill="none" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21c-4-2.5-8-6-8-11a5 5 0 019-3 5 5 0 019 3c0 5-4 8.5-8 11a2 2 0 01-2 0z"/></svg>
+      </div>
+      <p class="compare-note">Maçã — símbolo universal de "dieta", mas usado em praticamente todo app do gênero.</p>
+    </div>
+
+    <div class="opt">
+      <span class="opt-tag reco">NOVO · PRATO MACRO</span>
+      <div class="badge style-glass">
+        <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 3v9l6.3 3.6"/></svg>
+      </div>
+      <p class="compare-note">Prato visto de cima com divisão de macros — remete direto ao conceito de "controle nutricional".</p>
+    </div>
+
+    <div class="opt">
+      <span class="opt-tag">NOVO · TALHER + FOLHA</span>
+      <div class="badge style-glass">
+        <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2v8a2 2 0 002 2v10M6 2v8M8.5 2v8M6 8h2.5"/><path d="M18 2c-2.2 0-4 2.5-4 6s1.8 6 4 6 4-2.5 4-6-1.8-6-4-6z"/><path d="M18 14v8"/></svg>
+      </div>
+      <p class="compare-note">Garfo + colher estilizados — mais "app de nutrição corporativo" do que ícone de fruta.</p>
+    </div>
+
+    <div class="opt">
+      <span class="opt-tag">NOVO · GRÃO/ENERGIA</span>
+      <div class="badge style-glass">
+        <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22V10"/><path d="M12 10c0-4 2-6 6-7-1 4-3 6-6 7z"/><path d="M12 14c0-4-2-6-6-7 1 4 3 6 6 7z"/><path d="M12 18c0-3 1.6-4.6 4.5-5.4-.8 2.9-2.4 4.5-4.5 5.4z"/><path d="M12 18c0-3-1.6-4.6-4.5-5.4.8 2.9 2.4 4.5 4.5 5.4z"/></svg>
+      </div>
+      <p class="compare-note">Espiga estilizada — remete a "alimento/nutrição" de forma mais orgânica e menos batida.</p>
+    </div>
+  </div>
+
+  <!-- TRATAMENTOS DE FUNDO -->
+  <p class="section-label">TRATAMENTO DE FUNDO — 3 OPÇÕES</p>
+  <div class="row" style="margin-bottom:20px;">
+    <div class="opt">
+      <span class="opt-tag">A · SÓLIDO (atual)</span>
+      <div class="badge style-solid">
+        <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="10.5" width="3" height="3"/><rect x="6" y="9" width="2.5" height="6"/><rect x="15.5" y="9" width="2.5" height="6"/><rect x="19" y="10.5" width="3" height="3"/><line x1="8.5" y1="12" x2="15.5" y2="12"/></svg>
+      </div>
+      <p class="compare-note">Chapa laranja cheia. Chamativo, mas é o que já cansa em app mobile genérico.</p>
+    </div>
+
+    <div class="opt">
+      <span class="opt-tag reco">B · VIDRO/CONTORNO</span>
+      <div class="badge style-glass">
+        <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="10.5" width="3" height="3"/><rect x="6" y="9" width="2.5" height="6"/><rect x="15.5" y="9" width="2.5" height="6"/><rect x="19" y="10.5" width="3" height="3"/><line x1="8.5" y1="12" x2="15.5" y2="12"/></svg>
+      </div>
+      <p class="compare-note">Fundo escuro com borda fina e glow sutil. Ícone vira o protagonista, não a caixa.</p>
+    </div>
+
+    <div class="opt">
+      <span class="opt-tag">C · CHAPA COM ARESTA</span>
+      <div class="badge style-plate">
+        <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="10.5" width="3" height="3"/><rect x="6" y="9" width="2.5" height="6"/><rect x="15.5" y="9" width="2.5" height="6"/><rect x="19" y="10.5" width="3" height="3"/><line x1="8.5" y1="12" x2="15.5" y2="12"/></svg>
+      </div>
+      <p class="compare-note">Aço escuro com uma aresta laranja fina na lateral. O mais "corporativo" dos três.</p>
+    </div>
+  </div>
+
+  <!-- APLICAÇÃO EM CONTEXTO -->
+  <p class="section-label">COMO FICA NO APP (estilo B aplicado)</p>
+  <div class="context-block">
+    <div class="context-card">
+      <div class="ctx-row">
+        <div class="badge-sm"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="10.5" width="3" height="3"/><rect x="6" y="9" width="2.5" height="6"/><rect x="15.5" y="9" width="2.5" height="6"/><rect x="19" y="10.5" width="3" height="3"/><line x1="8.5" y1="12" x2="15.5" y2="12"/></svg></div>
+        <div class="ctx-text"><b>Meus Treinos</b><span>Preencha carga, repetições e finalize o treino do dia.</span></div>
+      </div>
+      <div class="ctx-row">
+        <div class="badge-sm"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 3v9l6.3 3.6"/></svg></div>
+        <div class="ctx-text"><b>Dieta</b><span>Seu desempenho começa na alimentação.</span></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="note-box">
+    <b>Recomendação:</b> ícone da barra olímpica (Treino) + prato de macros (Dieta), no tratamento B (vidro/contorno). Ele resolve os dois problemas de uma vez: os glifos deixam de ser o clichê genérico de app fitness, e o fundo em vidro escuro com glow sutil parece mais "painel de dados premium" do que "app de loja de suplemento" — o que combina com o resto da identidade escura que você já vem usando. Se achar o glow forte demais em telas pequenas (sidebar), o estilo C (chapa com aresta) é a alternativa mais sóbria, sem brilho nenhum.
+  </div>
+</div>
+</body>
+</html>
