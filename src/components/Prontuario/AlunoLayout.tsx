@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react';
 import { NavLink, Outlet, useNavigate, useOutletContext, useParams } from 'react-router-dom';
-import { ArrowLeft, LayoutDashboard, Loader2, AlertCircle, Settings2, MessageSquare, ClipboardCheck, BarChart3, CalendarRange } from 'lucide-react';
+import { ArrowLeft, LayoutDashboard, Loader2, AlertCircle, Settings2, MessageSquare, ClipboardCheck, CalendarRange } from 'lucide-react';
 import StudentAvatar from '../ui/StudentAvatar';
 import { usuarios } from '../../services/api';
 import ModalEditarAluno from './ModalEditarAluno';
-import { BarraOlimpicaIcon, TalherFolhaIcon } from '../icons/AppIcons';
+import { BarraOlimpicaIcon, TalherFolhaIcon, RelatorioGraficoIcon } from '../icons/AppIcons';
 import type { Usuario } from '../../types';
 
 interface AlunoLayoutContext {
@@ -15,7 +15,7 @@ const TABS = [
   { to: '', label: 'Visão Geral', icon: LayoutDashboard, end: true },
   { to: 'treino', label: 'Treino', icon: BarraOlimpicaIcon, end: false },
   { to: 'planejamento', label: 'Planejamento', icon: CalendarRange, end: false },
-  { to: 'progresso', label: 'Progressão', icon: BarChart3, end: false },
+  { to: 'progresso', label: 'Progressão', icon: RelatorioGraficoIcon, end: false },
   { to: 'dieta', label: 'Dieta', icon: TalherFolhaIcon, end: false },
   { to: 'acompanhamento', label: 'Acompanhamento', icon: MessageSquare, end: false },
   { to: 'avaliacao', label: 'Avaliação Física', icon: ClipboardCheck, end: false },

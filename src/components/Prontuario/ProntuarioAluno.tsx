@@ -7,8 +7,26 @@ import {
 import { fichas } from '../../services/api';
 import { useAlunoContext } from './AlunoLayout';
 import type {
-  FichaCompleta, FichaTreino, FichaTipo, Usuario,
+  FichaCompleta, FichaTreino, FichaTipo, Usuario, ExercicioTreino,
 } from '../../types';
+
+const LABEL_TIPO_TREINO_CORRIDA = {
+  regenerativo: 'Regenerativo',
+  intervalado: 'Intervalado',
+  longao: 'Longão',
+} as const;
+
+function resumoCardio(ex: ExercicioTreino): string {
+  if (ex.tipo_treino_corrida) {
+    const metas: string[] = [];
+    if (ex.tipo_treino_corrida === 'regenerativo' && ex.meta_minutos && ex.meta_minutos > 0) metas.push(`${ex.meta_minutos} min`);
+    if (ex.tipo_treino_corrida === 'intervalado' && ex.qtd_tiros && ex.qtd_tiros > 0 && ex.distancia_tiro) metas.push(`${ex.qtd_tiros}× ${ex.distancia_tiro}`);
+    if (ex.tipo_treino_corrida === 'longao' && ex.meta_distancia_corrida && ex.meta_distancia_corrida > 0) metas.push(`${ex.meta_distancia_corrida.toLocaleString('pt-BR')} km`);
+    return `🏃 ${LABEL_TIPO_TREINO_CORRIDA[ex.tipo_treino_corrida]}${metas.length ? ': ' + metas.join(' · ') : ''}`;
+  }
+  return ex.meta_tempo_min ? `${ex.meta_tempo_min} min` : ex.meta_distancia_km ? `${ex.meta_distancia_km} km` : 'Cardio';
+}
+
 
 function formatarData(iso: string): string {
   if (!iso) return '—';
@@ -461,7 +479,7 @@ function FichaArquivadaModal({ ficha, onClose }: {
                           <span className="text-zinc-200 font-medium min-w-0 flex-1 truncate">{ex.nome_exercicio}</span>
                           {ex.categoria === 'cardio' ? (
                             <span className="text-[10px] bg-sky-500/10 text-sky-400 border border-sky-500/30 px-1.5 py-0.5 rounded-full shrink-0">
-                              {ex.meta_tempo_min ? `${ex.meta_tempo_min} min` : ex.meta_distancia_km ? `${ex.meta_distancia_km} km` : 'Cardio'}
+                              {resumoCardio(ex)}
                             </span>
                           ) : (
                             <span className="text-[11px] text-muted-steel shrink-0">

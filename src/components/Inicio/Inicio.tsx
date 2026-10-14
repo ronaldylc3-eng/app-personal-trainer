@@ -2,15 +2,17 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   AlertCircle, ArrowRight, CalendarCheck, CalendarDays, Check, Clock,
-  Flame, Loader2, Lock, Moon, TrendingUp, X,
+  Flame, Loader2, Lock, Moon, X,
 } from 'lucide-react';
+import { PlacaTaticaIcon } from '../icons/AppIcons';
 import StudentAvatar from '../ui/StudentAvatar';
 import { useAuth } from '../../hooks/useAuth';
 import { useSequencia } from '../../hooks/useSequencia';
 import { fichas, dieta, logsExecucao, planejamento, METAS_PADRAO } from '../../services/api';
 import { DIA_MS } from '../../utils/consistencia';
 import { DAYS_OF_WEEK, DAYS_SHORT } from '../../types';
-import { dataDeDiaSemana, dataSP as dataSPFuso } from '../../utils/semanaUtils';
+import { dataDeDiaSemana, dataSP as dataSPFuso, intervaloAtualSemanaSP } from '../../utils/semanaUtils';
+import { resolverMetasDoDia } from '../../utils/metasNutricionais';
 import { BarraOlimpicaIcon, TalherFolhaIcon, CalendarioCanetaIcon } from '../icons/AppIcons';
 import type {
   FichaCompleta, MetasNutricionais, PlanejamentoItem,
@@ -119,8 +121,25 @@ export default function Inicio() {
     return () => { cancel = true; };
   }, [userId, isVIP]);
 
+  // Treinos com sessão finalizada na semana corrente (Seg a Dom, fuso SP).
+  // Usado pelo modal "Organizar Treinos" para travar a movimentação de treinos
+  // já concluídos — espelha a trava da migration 033 no salvar_planejamento.
+  const treinosConcluidosSemana = useMemo(() => {
+    const concluidos = new Set<string>();
+    const { inicio, fim } = intervaloAtualSemanaSP();
+    const iniMs = inicio.getTime();
+    const fimMs = fim.getTime();
+    for (const s of progressoSessoes) {
+      if (!s.treino_id) continue;
+      const ts = new Date(s.data_execucao || 0).getTime();
+      if (Number.isFinite(ts) && ts >= iniMs && ts <= fimMs) concluidos.add(s.treino_id);
+    }
+    return concluidos;
+  }, [progressoSessoes]);
+
   const consumo = useMemo(() => somarMacros(consumoHoje), [consumoHoje]);
-  const goals = metas ?? METAS_PADRAO;
+  const diaHoje = diaSemanaSP();
+  const { efetivas: goals, diaTemMetaEspecifica: cicloHoje } = resolverMetasDoDia(metas, METAS_PADRAO, diaHoje);
   const ultimoTreino = sequencia.sessoes[0] ?? null;
 
   // Planejamento de hoje: treino(s) alocado(s), descanso ou sem planejamento
@@ -539,6 +558,12 @@ export default function Inicio() {
                   </Link>
                 </div>
 
+                {cicloHoje && (
+                  <div className="mb-3 flex w-fit items-center gap-1.5 px-2 py-1 clip-bevel-sm bg-accent/15 border border-accent/30 text-accent-light text-[9px] font-extrabold uppercase tracking-[0.15em]">
+                    🔥 Meta Específica de {DAYS_OF_WEEK[diaHoje].name}
+                  </div>
+                )}
+
                 <p className="text-3xl md:text-4xl font-bold text-bone stat-number" style={{ color: kcalExcedeu ? '#ef4444' : undefined }}>
                   {Math.round(consumo.calories).toLocaleString('pt-BR')}
                   <span className="text-sm font-medium text-muted-steel"> / {kcalGoal.toLocaleString('pt-BR')} kcal</span>
@@ -646,9 +671,7 @@ export default function Inicio() {
 
               <div className="relative z-10 w-full flex flex-col sm:flex-row items-start sm:items-center sm:justify-between gap-4 sm:gap-5 p-5 sm:p-[26px]">
                 <div className="flex items-center gap-4 min-w-0">
-                  <div className="w-12 h-12 flex-none clip-bevel-sm bg-gradient-to-br from-accent-light to-plate shadow-[inset_0_1px_0_rgba(255,255,255,0.5),0_6px_16px_-6px_rgba(255,90,31,0.5)] flex items-center justify-center">
-                    <TrendingUp size={22} strokeWidth={2.6} className="text-[#170B04]" />
-                  </div>
+                  <PlacaTaticaIcon size={48} />
                   <div className="min-w-0">
                     <h3 className="font-display uppercase tracking-[0.02em] text-[18px] text-white leading-tight">Sua evolução importa</h3>
                     {maiorSalto ? (
@@ -686,6 +709,7 @@ export default function Inicio() {
           userId={userId}
           fichaTreino={fichaTreino}
           planoSemanaAtual={planoSemana}
+          treinosConcluidosSemana={treinosConcluidosSemana}
           onSucesso={(novoPlano) => {
             setPlanoSemana(novoPlano);
             setFeedbackPlanejamento('Calendário semanal atualizado com sucesso!');

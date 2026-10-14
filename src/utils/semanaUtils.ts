@@ -199,3 +199,35 @@ export function dataDeDiaSemana(diaSemana: number): string {
   alvo.setUTCDate(alvo.getUTCDate() + diff);
   return dataSP(alvo);
 }
+
+export interface IntervaloSemanaSP {
+  inicio: Date;
+  fim: Date;
+  inicioISO: string;
+  fimISO: string;
+}
+
+/**
+ * Intervalo da semana atual (Segunda-feira 00:00:00 até Domingo 23:59:59.999)
+ * no fuso America/Sao_Paulo, expresso como ISO timestamps com offset -03:00.
+ * Usado para restringir queries de logs_treino (timestamptz em UTC) à janela
+ * exata da semana — ao virar segunda-feira, o intervalo desliza sozinho e o
+ * gráfico/recurso de bloqueio "reseta" sem intervenção.
+ */
+export function intervaloAtualSemanaSP(referencia: Date = new Date()): IntervaloSemanaSP {
+  const dow = diaSemanaSP(referencia); // 0=Domingo .. 6=Sabado (fuso SP)
+  const diffParaSegunda = dow === 0 ? 6 : dow - 1;
+
+  // Âncora ao meio-dia UTC para que o dia em SP fique estável.
+  const inicio = new Date(referencia);
+  inicio.setUTCHours(12, 0, 0, 0);
+  inicio.setUTCDate(inicio.getUTCDate() - diffParaSegunda);
+  const fim = new Date(inicio.getTime() + 6 * 24 * 60 * 60 * 1000);
+
+  return {
+    inicio,
+    fim,
+    inicioISO: `${dataSP(inicio)}T00:00:00.000-03:00`,
+    fimISO: `${dataSP(fim)}T23:59:59.999-03:00`,
+  };
+}

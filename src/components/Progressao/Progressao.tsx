@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
-import { TrendingUp, Clock, CalendarDays, ChevronDown, Dumbbell, Loader2, AlertCircle, Trophy, BarChart3 } from 'lucide-react';
+import { TrendingUp, Clock, CalendarDays, ChevronDown, Dumbbell, Loader2, AlertCircle, Trophy } from 'lucide-react';
+import { PlacaTaticaIcon } from '../icons/AppIcons';
 import { useAuth } from '../../hooks/useAuth';
 import { logsExecucao } from '../../services/api';
 import SecaoVolumeSemanal from '../Shared/SecaoVolumeSemanal';
@@ -234,9 +235,7 @@ export default function Progressao() {
 
         {/* Cabecalho da pagina */}
         <div className="flex items-start gap-3.5 mb-7">
-          <div className="w-[46px] h-[46px] flex-none bg-gradient-to-br from-accent-light to-plate flex items-center justify-center shadow-[inset_0_1px_0_rgba(255,255,255,0.4)] clip-bevel">
-            <BarChart3 size={22} className="text-[#170B04]" strokeWidth={2.4} />
-          </div>
+          <PlacaTaticaIcon size={46} />
           <div className="min-w-0">
             <h1 className="font-display uppercase text-[26px] leading-tight text-bone">Progressão</h1>
             <p className="text-[13.5px] text-muted-steel">

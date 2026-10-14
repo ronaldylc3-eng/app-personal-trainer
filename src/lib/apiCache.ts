@@ -63,6 +63,14 @@ export function withCache<T>(
 
   const inflight = fn().then(
     (value) => {
+      // Não cacheia resultados vazios/ausentes de chaves críticas (ex.: o
+      // planejamento de um aluno) — um array vazio transitório não pode
+      // ficar "quente" por 60s e mascarar a tela de treino do dia.
+      const esvaziado = Array.isArray(value) ? value.length === 0 : value === null || value === undefined;
+      if (key.startsWith('planejamento:') && esvaziado) {
+        store.delete(key);
+        return value;
+      }
       cacheSet(key, value, ttlMs);
       return value;
     },

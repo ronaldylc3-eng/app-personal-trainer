@@ -32,6 +32,7 @@ import {
   Info,
   RotateCcw,
   Sparkles,
+  Lock,
 } from 'lucide-react';
 import { DAYS_OF_WEEK, DAYS_SHORT } from '../../types';
 import type { FichaCompleta, PlanejamentoItem } from '../../types';
@@ -44,6 +45,7 @@ interface ModalPlanejamentoAlunoProps {
   userId: string;
   fichaTreino: FichaCompleta | null;
   planoSemanaAtual: PlanejamentoItem[];
+  treinosConcluidosSemana?: Set<string>;
   onSucesso: (novoPlano: PlanejamentoItem[]) => void;
 }
 
@@ -63,6 +65,7 @@ export default function ModalPlanejamentoAluno({
   userId,
   fichaTreino,
   planoSemanaAtual,
+  treinosConcluidosSemana,
   onSucesso,
 }: ModalPlanejamentoAlunoProps) {
   const [salvando, setSalvando] = useState(false);
@@ -155,6 +158,12 @@ export default function ModalPlanejamentoAluno({
     setArrastandoId(String(e.active.id));
   }
 
+  // Treino com sessão finalizada na semana corrente não pode ser movido de dia
+  // nem reordenado no calendário do aluno (trava espelhada no salvar_planejamento).
+  function treinoConcluidoSemana(treinoId: string): boolean {
+    return !!treinosConcluidosSemana?.has(treinoId);
+  }
+
   function handleDragEnd(e: DragEndEvent) {
     const { active, over } = e;
     setArrastandoId(null);
@@ -176,6 +185,13 @@ export default function ModalPlanejamentoAluno({
     }
 
     if (fromDia === -1 || fromIdx === -1) return;
+
+    // Treino concluído na semana fica travado: nenhuma movimentação.
+    const itemMovido = semanaState[fromDia].treinos[fromIdx];
+    if (itemMovido && treinoConcluidoSemana(itemMovido.treinoId)) {
+      setErro('Treino já concluído nesta semana não pode ser movido. O ciclo reseta toda segunda-feira.');
+      return;
+    }
 
     // Descobrir dia e posição de destino
     let toDia = fromDia;
@@ -396,6 +412,7 @@ export default function ModalPlanejamentoAluno({
                       isHoje={isHoje}
                       diaConfig={dia}
                       treinosValidos={treinosValidos}
+                      treinosConcluidosSemana={treinosConcluidosSemana}
                       onToggleDescanso={() => handleToggleDescanso(diaIdx)}
                     />
                   );
@@ -501,6 +518,7 @@ function ColunaDiaAluno({
   isHoje,
   diaConfig,
   treinosValidos,
+  treinosConcluidosSemana,
   onToggleDescanso,
 }: {
   diaIdx: number;
@@ -509,6 +527,7 @@ function ColunaDiaAluno({
   isHoje: boolean;
   diaConfig: DiaConfig;
   treinosValidos: Map<string, { id: string; nome: string; qtdEx: number; isCardio: boolean }>;
+  treinosConcluidosSemana?: Set<string>;
   onToggleDescanso: () => void;
 }) {
   const { setNodeRef, isOver } = useDroppable({
@@ -574,6 +593,7 @@ function ColunaDiaAluno({
                 nomeTreino={info?.nome || 'Treino'}
                 qtdEx={info?.qtdEx ?? 0}
                 isCardio={info?.isCardio ?? false}
+                bloqueado={treinosConcluidosSemana?.has(aloc.treinoId) ?? false}
               />
             );
           })}
@@ -609,14 +629,17 @@ function CardTreinoArrastavel({
   nomeTreino,
   qtdEx,
   isCardio,
+  bloqueado,
 }: {
   alocId: string;
   nomeTreino: string;
   qtdEx: number;
   isCardio: boolean;
+  bloqueado: boolean;
 }) {
   const { attributes, listeners, setNodeRef, transform, isDragging } = useSortable({
     id: alocId,
+    disabled: bloqueado,
   });
 
   const style = transform
@@ -629,24 +652,24 @@ function CardTreinoArrastavel({
     <div
       ref={setNodeRef}
       style={style}
-      {...attributes}
-      {...listeners}
-      className={`group relative flex items-center justify-between gap-1.5 p-2 clip-bevel-sm border text-left cursor-grab active:cursor-grabbing select-none transition-all duration-150 touch-none ${
-        isDragging
-          ? 'opacity-30 border-accent bg-accent/10'
-          : 'bg-zinc-900 border-line hover:border-accent/50 hover:bg-zinc-800/80 shadow-sm'
+      {...(bloqueado ? { title: 'Já concluído nesta semana — não pode ser movido.' } : attributes)}
+      {...(bloqueado ? {} : listeners)}
+      className={`group relative flex items-center justify-between gap-1.5 p-2 clip-bevel-sm border text-left select-none transition-all duration-150 ${
+        bloqueado
+          ? 'border-emerald-500/40 bg-emerald-500/[0.06] cursor-not-allowed'
+          : isDragging
+            ? 'opacity-30 border-accent bg-accent/10 cursor-grab active:cursor-grabbing touch-none'
+            : 'bg-zinc-900 border-line hover:border-accent/50 hover:bg-zinc-800/80 shadow-sm cursor-grab active:cursor-grabbing touch-none'
       }`}
     >
       <div className="flex items-center gap-1.5 min-w-0">
-        <GripVertical size={12} className="text-zinc-500 group-hover:text-accent-light shrink-0" />
-        {isCardio ? (
-          <Flame size={12} className="text-orange-400 shrink-0" />
-        ) : (
-          <Dumbbell size={12} className="text-accent-light shrink-0" />
-        )}
+        {bloqueado
+          ? <Lock size={12} className="text-emerald-400 shrink-0" />
+          : <GripVertical size={12} className="text-zinc-500 group-hover:text-accent-light shrink-0" />}
+        {isCardio && <Flame size={12} className="text-orange-400 shrink-0" />}
         <div className="min-w-0">
-          <p className="text-xs font-bold text-bone truncate leading-tight">{nomeTreino}</p>
-          <p className="text-[10px] text-muted-steel">{qtdEx} ex</p>
+          <p className={`text-xs font-bold truncate leading-tight ${bloqueado ? 'text-emerald-300' : 'text-bone'}`}>{nomeTreino}</p>
+          <p className="text-[10px] text-muted-steel">{bloqueado ? 'Concluído nesta semana' : `${qtdEx} ex`}</p>
         </div>
       </div>
     </div>

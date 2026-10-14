@@ -4,7 +4,8 @@
 // =============================================================
 
 import { useEffect, useState } from 'react';
-import { BarChart3, Dumbbell, Loader2, AlertCircle, UserX } from 'lucide-react';
+import { Dumbbell, Loader2, AlertCircle, UserX } from 'lucide-react';
+import { PlacaTaticaIcon } from '../icons/AppIcons';
 import { logsExecucao } from '../../services/api';
 import { useAlunoContext } from './AlunoLayout';
 import SecaoVolumeSemanal from '../Shared/SecaoVolumeSemanal';
@@ -52,9 +53,7 @@ export default function ProntuarioProgressao() {
 
         {/* Cabeçalho */}
         <div className="flex items-start gap-3.5">
-          <div className="w-[46px] h-[46px] flex-none bg-gradient-to-br from-accent-light to-plate flex items-center justify-center shadow-[inset_0_1px_0_rgba(255,255,255,0.4)] clip-bevel">
-            <BarChart3 size={22} className="text-[#170B04]" strokeWidth={2.4} />
-          </div>
+          <PlacaTaticaIcon size={46} />
           <div>
             <h2 className="font-display uppercase text-[26px] leading-tight text-bone">Progressão</h2>
             <p className="text-[13.5px] text-muted-steel">

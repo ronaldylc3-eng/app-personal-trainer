@@ -1,14 +1,14 @@
 import { NavLink } from 'react-router-dom';
-import { User, Home, BarChart3, Users, FileText, Menu, X, ChevronRight, Activity } from 'lucide-react';
+import { User, Home, Users, FileText, Menu, X, ChevronRight, Activity } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { haptics } from '../utils/haptics';
-import { BarraOlimpicaIcon, TalherFolhaIcon, LogoWordmark } from './icons/AppIcons';
+import { BarraOlimpicaIcon, TalherFolhaIcon, LogoWordmark, RelatorioGraficoIcon } from './icons/AppIcons';
 
 const allLinks = [
   { to: '/alunos', label: 'Alunos', icon: Users, vipOnly: true, gestorOnly: true },
   { to: '/treinos', label: 'Treino', icon: BarraOlimpicaIcon, vipOnly: false, gestorHidden: true },
   { to: '/dieta', label: 'Dieta', icon: TalherFolhaIcon, vipOnly: true, gestorHidden: true },
-  { to: '/progresso', label: 'Progressão', icon: BarChart3, vipOnly: false, gestorHidden: true },
+  { to: '/progresso', label: 'Progressão', icon: RelatorioGraficoIcon, vipOnly: false, gestorHidden: true },
   { to: '/relatorios', label: 'Relatórios', icon: FileText, gestorOnly: true },
 ];
 
@@ -16,7 +16,7 @@ const allBottomNavItems = [
   { to: '/inicio', label: 'Início', icon: Home },
   { to: '/treinos', label: 'Treino', icon: BarraOlimpicaIcon, gestorHidden: true },
   { to: '/dieta', label: 'Dieta', icon: TalherFolhaIcon, vipOnly: true, gestorHidden: true },
-  { to: '/progresso', label: 'Progresso', icon: BarChart3, gestorHidden: true },
+  { to: '/progresso', label: 'Progresso', icon: RelatorioGraficoIcon, gestorHidden: true },
   { to: '/alunos', label: 'Alunos', icon: Users, gestorOnly: true },
   { to: '/relatorios', label: 'Relatórios', icon: FileText, gestorOnly: true },
 ];

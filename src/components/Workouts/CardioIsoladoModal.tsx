@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { X, Flame, Timer, Loader2, Check, Ruler } from 'lucide-react';
 import { logsCardio } from '../../services/api';
 import { haptics } from '../../utils/haptics';
+import type { TipoTreinoCorrida } from '../../types';
 
 const MODALIDADES_CARDIO = [
   'Esteira',
@@ -16,6 +17,12 @@ const MODALIDADES_CARDIO = [
   'Outro',
 ];
 
+const LABEL_TIPO_TREINO_CORRIDA: Record<TipoTreinoCorrida, string> = {
+  regenerativo: 'Regenerativo',
+  intervalado: 'Intervalado',
+  longao: 'Longão',
+};
+
 type Feedback = { tipo: 'ok' | 'erro'; msg: string } | null;
 
 export interface CardioIsoladoResultado {
@@ -24,14 +31,33 @@ export interface CardioIsoladoResultado {
   distanciaKm: number | null;
 }
 
+// Alvo de Cardio Isolado da FICHA: preenchimento executado direto do card
+// da fila (bypass da listagem de exercícios). transporta a prescrição do
+// exercício único de cardio para preencher o modal e salvar vinculado ao
+// treino real (logs_treino.treino_id), mantendo a métrica semanal de dias.
+export interface CardioIsoladoAlvo {
+  treinoId: string;
+  exercicioId: string;
+  treinoNome: string;
+  nomeCardio: string;
+  metaMin: number | null;
+  metaKm: number | null;
+  tipoTreinoCorrida?: TipoTreinoCorrida | null;
+  qtdTiros?: number | null;
+  distanciaTiro?: string | null;
+  metaDistanciaCorrida?: number | null;
+  metaMinutosPrescrito?: number | null;
+}
+
 interface CardioIsoladoModalProps {
   isOpen: boolean;
   onClose: () => void;
   userId: string;
   onSaved: (resultado: CardioIsoladoResultado) => void | Promise<void>;
+  treinoAlvo?: CardioIsoladoAlvo | null;
 }
 
-export function CardioIsoladoModal({ isOpen, onClose, userId, onSaved }: CardioIsoladoModalProps) {
+export function CardioIsoladoModal({ isOpen, onClose, userId, onSaved, treinoAlvo }: CardioIsoladoModalProps) {
   const [modalidade, setModalidade] = useState(MODALIDADES_CARDIO[0]);
   const [modalidadeLivre, setModalidadeLivre] = useState('');
   const [minutos, setMinutos] = useState('');
@@ -41,22 +67,31 @@ export function CardioIsoladoModal({ isOpen, onClose, userId, onSaved }: CardioI
 
   useEffect(() => {
     if (isOpen) {
-      setModalidade(MODALIDADES_CARDIO[0]);
-      setModalidadeLivre('');
-      setMinutos('');
-      setKm('');
+      if (treinoAlvo) {
+        setModalidade(treinoAlvo.nomeCardio || 'Cardio');
+        setModalidadeLivre('');
+        setMinutos(String(treinoAlvo.metaMin && treinoAlvo.metaMin > 0 ? Math.round(treinoAlvo.metaMin) : ''));
+        setKm(String(treinoAlvo.metaKm && treinoAlvo.metaKm > 0 ? treinoAlvo.metaKm : ''));
+      } else {
+        setModalidade(MODALIDADES_CARDIO[0]);
+        setModalidadeLivre('');
+        setMinutos('');
+        setKm('');
+      }
       setSaving(false);
       setFeedback(null);
     }
-  }, [isOpen]);
+  }, [isOpen, treinoAlvo]);
 
   if (!isOpen) return null;
 
   const minValor = Math.max(0, Math.round(parseFloat(minutos.replace(',', '.')) || 0));
   const kmValor = Math.max(0, parseFloat(km.replace(',', '.')) || 0);
-  const nomeFinal = modalidade === 'Outro'
-    ? (modalidadeLivre.trim() || 'Cardio')
-    : modalidade;
+  const nomeFinal = treinoAlvo
+    ? (treinoAlvo.nomeCardio || 'Cardio')
+    : modalidade === 'Outro'
+      ? (modalidadeLivre.trim() || 'Cardio')
+      : modalidade;
   const valido = minValor > 0;
 
   async function handleSalvar() {
@@ -70,17 +105,26 @@ export function CardioIsoladoModal({ isOpen, onClose, userId, onSaved }: CardioI
     setFeedback(null);
     haptics.impact?.();
     try {
-      await logsCardio.criarCardioIsolado(userId, {
+      const dados: CardioIsoladoResultado = {
         nomeCardio: nomeFinal,
         duracaoMin: minValor,
         distanciaKm: kmValor > 0 ? kmValor : null,
-      });
+      };
+      if (treinoAlvo) {
+        await logsCardio.criarCardioIsoladoDoTreino(userId, treinoAlvo.treinoId, treinoAlvo.exercicioId, {
+          nomeCardio: nomeFinal,
+          duracaoMin: minValor,
+          distanciaKm: kmValor > 0 ? kmValor : null,
+        });
+      } else {
+        await logsCardio.criarCardioIsolado(userId, {
+          nomeCardio: nomeFinal,
+          duracaoMin: minValor,
+          distanciaKm: kmValor > 0 ? kmValor : null,
+        });
+      }
       haptics.success?.();
-      await onSaved({
-        nomeCardio: nomeFinal,
-        duracaoMin: minValor,
-        distanciaKm: kmValor > 0 ? kmValor : null,
-      });
+      await onSaved(dados);
     } catch (e) {
       setFeedback({
         tipo: 'erro',
@@ -90,6 +134,33 @@ export function CardioIsoladoModal({ isOpen, onClose, userId, onSaved }: CardioI
       setSaving(false);
     }
   }
+
+  const metaResumo = (() => {
+    if (!treinoAlvo) return '';
+    if (treinoAlvo.tipoTreinoCorrida === 'regenerativo') {
+      return treinoAlvo.metaMinutosPrescrito && treinoAlvo.metaMinutosPrescrito > 0
+        ? `Meta: ${Math.round(treinoAlvo.metaMinutosPrescrito)} min`
+        : '';
+    }
+    if (treinoAlvo.tipoTreinoCorrida === 'intervalado') {
+      if (!treinoAlvo.qtdTiros || treinoAlvo.qtdTiros <= 0) return '';
+      let resumo = `Tiros: ${treinoAlvo.qtdTiros}×${treinoAlvo.distanciaTiro || ''}`;
+      if (treinoAlvo.metaMinutosPrescrito && treinoAlvo.metaMinutosPrescrito > 0) resumo += ` · ~${Math.round(treinoAlvo.metaMinutosPrescrito)} min`;
+      return resumo;
+    }
+    if (treinoAlvo.tipoTreinoCorrida === 'longao') {
+      if (!treinoAlvo.metaDistanciaCorrida || treinoAlvo.metaDistanciaCorrida <= 0) return '';
+      let resumo = `Meta: ${treinoAlvo.metaDistanciaCorrida.toLocaleString('pt-BR')} km`;
+      if (treinoAlvo.metaMinutosPrescrito && treinoAlvo.metaMinutosPrescrito > 0) resumo += ` · ~${Math.round(treinoAlvo.metaMinutosPrescrito)} min`;
+      return resumo;
+    }
+    if (treinoAlvo.metaMin && treinoAlvo.metaMin > 0 && treinoAlvo.metaKm && treinoAlvo.metaKm > 0) {
+      return `Meta: ${Math.round(treinoAlvo.metaMin)} min · ${treinoAlvo.metaKm.toLocaleString('pt-BR')} km`;
+    }
+    if (treinoAlvo.metaMin && treinoAlvo.metaMin > 0) return `Meta: ${Math.round(treinoAlvo.metaMin)} min`;
+    if (treinoAlvo.metaKm && treinoAlvo.metaKm > 0) return `Meta: ${treinoAlvo.metaKm.toLocaleString('pt-BR')} km`;
+    return '';
+  })();
 
   return (
     <div
@@ -114,48 +185,73 @@ export function CardioIsoladoModal({ isOpen, onClose, userId, onSaved }: CardioI
               <Flame size={19} className="text-[#170B04]" />
             </div>
             <div className="min-w-0">
-              <h2 className="font-display text-[17px] text-bone tracking-wide uppercase">Registrar Cardio Isolado</h2>
+              <h2 className="font-display text-[17px] text-bone tracking-wide uppercase">
+                {treinoAlvo ? 'Concluir Cardio Isolado' : 'Registrar Cardio Isolado'}
+              </h2>
               <p className="text-[11.5px] text-muted-steel leading-snug">
-                Lançe o tempo que você praticou hoje. Ele abate direto da sua meta semanal de cardio.
+                {treinoAlvo
+                  ? `Treino "${treinoAlvo.treinoNome}" — registre o que você praticou hoje para concluir e abater da sua meta semanal.`
+                  : 'Lançe o tempo que você praticou hoje. Ele abate direto da sua meta semanal de cardio.'}
               </p>
             </div>
           </div>
 
           <div className="space-y-4">
-            {/* Modalidade */}
-            <div>
-              <label className="text-[11px] font-bold uppercase tracking-wider text-muted-steel mb-1.5 block flex items-center gap-1.5">
-                <Flame size={12} className="text-accent-light" /> Modalidade
-              </label>
-              <div className="grid grid-cols-2 gap-1.5">
-                {MODALIDADES_CARDIO.map(m => (
-                  <button
-                    key={m}
-                    type="button"
-                    onClick={() => {
-                      haptics.selection?.();
-                      setModalidade(m);
-                    }}
-                    className={`px-2 py-1.5 text-[11.5px] font-bold border clip-bevel-sm transition-all text-left ${
-                      modalidade === m
-                        ? 'border-orange-400/70 bg-orange-400/15 text-orange-200'
-                        : 'border-line bg-panel text-muted-steel hover:text-bone hover:border-zinc-600'
-                    }`}
-                  >
-                    {m}
-                  </button>
-                ))}
+            {treinoAlvo ? (
+              /* Prescrição do Cardio Isolado da ficha: modalidade + meta exibidas
+                 direto (o aluno só lança o realizado, já pré-preenchido com a meta) */
+              <div className="bg-orange-400/[0.07] border border-orange-400/25 clip-bevel-sm px-4 py-3.5 flex items-start gap-3">
+                <div className="w-9 h-9 shrink-0 rounded-lg bg-orange-400/15 flex items-center justify-center text-orange-300">
+                  <Flame size={16} />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-[13px] font-bold text-orange-200">{treinoAlvo.nomeCardio}</p>
+                  {treinoAlvo.tipoTreinoCorrida && (
+                    <p className="text-[11px] text-orange-300/80 font-semibold uppercase tracking-wider mt-0.5">
+                      🏃 {LABEL_TIPO_TREINO_CORRIDA[treinoAlvo.tipoTreinoCorrida]}
+                    </p>
+                  )}
+                  {metaResumo && (
+                    <p className="text-[12.5px] text-bone font-semibold mt-1">{metaResumo}</p>
+                  )}
+                </div>
               </div>
-              {modalidade === 'Outro' && (
-                <input
-                  type="text"
-                  value={modalidadeLivre}
-                  onChange={e => setModalidadeLivre(e.target.value)}
-                  placeholder="Digite a modalidade (ex.: Boxe Thai)"
-                  className="mt-2 w-full bg-zinc-900 border border-zinc-800 rounded px-3 py-2 text-sm text-zinc-100 focus:outline-none focus:border-accent"
-                />
-              )}
-            </div>
+            ) : (
+              /* Modalidade (modo livre, fora da ficha) */
+              <div>
+                <label className="text-[11px] font-bold uppercase tracking-wider text-muted-steel mb-1.5 block flex items-center gap-1.5">
+                  <Flame size={12} className="text-accent-light" /> Modalidade
+                </label>
+                <div className="grid grid-cols-2 gap-1.5">
+                  {MODALIDADES_CARDIO.map(m => (
+                    <button
+                      key={m}
+                      type="button"
+                      onClick={() => {
+                        haptics.selection?.();
+                        setModalidade(m);
+                      }}
+                      className={`px-2 py-1.5 text-[11.5px] font-bold border clip-bevel-sm transition-all text-left ${
+                        modalidade === m
+                          ? 'border-orange-400/70 bg-orange-400/15 text-orange-200'
+                          : 'border-line bg-panel text-muted-steel hover:text-bone hover:border-zinc-600'
+                      }`}
+                    >
+                      {m}
+                    </button>
+                  ))}
+                </div>
+                {modalidade === 'Outro' && (
+                  <input
+                    type="text"
+                    value={modalidadeLivre}
+                    onChange={e => setModalidadeLivre(e.target.value)}
+                    placeholder="Digite a modalidade (ex.: Boxe Thai)"
+                    className="mt-2 w-full bg-zinc-900 border border-zinc-800 rounded px-3 py-2 text-sm text-zinc-100 focus:outline-none focus:border-accent"
+                  />
+                )}
+              </div>
+            )}
 
             {/* Minutos */}
             <div>
@@ -209,7 +305,11 @@ export function CardioIsoladoModal({ isOpen, onClose, userId, onSaved }: CardioI
                 className="btn-forge flex-1 py-2.5 text-xs sm:text-sm flex items-center justify-center gap-2 shadow-plate"
               >
                 {saving ? <Loader2 size={15} className="animate-spin" /> : <Check size={15} />}
-                <span>{valido ? `Salvar ${minValor} min de ${nomeFinal}` : 'Salvar registro'}</span>
+                <span>
+                  {treinoAlvo
+                    ? (valido ? `Concluir ${minValor} min` : 'Concluir Cardio')
+                    : (valido ? `Salvar ${minValor} min de ${nomeFinal}` : 'Salvar registro')}
+                </span>
               </button>
               <button
                 type="button"

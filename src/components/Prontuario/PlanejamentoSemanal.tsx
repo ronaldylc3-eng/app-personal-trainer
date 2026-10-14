@@ -12,12 +12,13 @@ import { CSS } from '@dnd-kit/utilities';
 import {
   CalendarRange, Moon, X, Save, Check, Loader2, AlertCircle,
   GripVertical, Dumbbell, MousePointerClick, Flame, Timer, Layers,
+  Lock,
 } from 'lucide-react';
 import { fichas, logsExecucao, planejamento } from '../../services/api';
 import { DAYS_OF_WEEK, DAYS_SHORT } from '../../types';
 import { useAlunoContext } from './AlunoLayout';
 import type { FichaCompleta, PlanejamentoItem, SessaoComProgresso } from '../../types';
-import { dataSP, dataDeDiaSemana } from '../../utils/semanaUtils';
+import { dataSP, dataDeDiaSemana, intervaloAtualSemanaSP } from '../../utils/semanaUtils';
 
 function erroMsg(e: unknown): string {
   return e instanceof Error ? e.message : 'Erro inesperado. Tente novamente.';
@@ -160,6 +161,13 @@ export default function PlanejamentoSemanal() {
   }
 
   function alocarTreino(treinoId: string, dia: number) {
+    if (treinosBloqueadosSemana.has(treinoId)) {
+      setFeedback({
+        tipo: 'erro',
+        msg: 'Este treino já foi concluído nesta semana e não pode ser remanejado. O ciclo reseta toda segunda-feira.',
+      });
+      return;
+    }
     setChipSelecionado(null);
     atualizarDia(dia, d => ({
       descanso: false,
@@ -168,6 +176,14 @@ export default function PlanejamentoSemanal() {
   }
 
   function removerAlocacao(dia: number, idx: number) {
+    const alvo = semana[dia]?.treinos[idx];
+    if (alvo && treinosBloqueadosSemana.has(alvo.treinoId)) {
+      setFeedback({
+        tipo: 'erro',
+        msg: 'Treino já concluído nesta semana não pode ser removido do calendário antes de segunda.',
+      });
+      return;
+    }
     atualizarDia(dia, d => ({ ...d, treinos: d.treinos.filter((_, i) => i !== idx) }));
   }
 
@@ -203,6 +219,16 @@ export default function PlanejamentoSemanal() {
     const fromIdx = Number(m[2]);
     const origem = semana[fromDia];
     if (!origem) return;
+
+    // Treino já concluído nesta semana não pode ser movido/reordenado/removido.
+    const treinoMovido = origem.treinos[fromIdx]?.treinoId;
+    if (treinoMovido && treinosBloqueadosSemana.has(treinoMovido)) {
+      setFeedback({
+        tipo: 'erro',
+        msg: 'Treino já concluído nesta semana não pode ser movido. O ciclo reseta toda segunda-feira.',
+      });
+      return;
+    }
 
     if (overStr === BANCO_ID) {
       removerAlocacao(fromDia, fromIdx);
@@ -285,6 +311,25 @@ export default function PlanejamentoSemanal() {
       if (d) set.add(`${s.treino_id}|${d}`);
     }
     return set;
+  }, [progresso]);
+
+  // Treinos BLOQUEADOS na semana corrente (fica no gestor): todo treino que já
+  // possui sessão finalizada nesta semana (Seg a Dom, fuso SP) não pode ser
+  // movido de dia, removido do calendário ou realocado — espelha a trava da
+  // migration 033 (salvar_planejamento rejeita mudanças de treinos concluídos).
+  const treinosBloqueadosSemana = useMemo(() => {
+    const bloqueados = new Set<string>();
+    const { inicio, fim } = intervaloAtualSemanaSP();
+    const iniMs = inicio.getTime();
+    const fimMs = fim.getTime();
+    for (const s of progresso) {
+      if (!s.treino_id) continue;
+      const ts = new Date(s.data_execucao || 0).getTime();
+      if (Number.isFinite(ts) && ts >= iniMs && ts <= fimMs) {
+        bloqueados.add(s.treino_id);
+      }
+    }
+    return bloqueados;
   }, [progresso]);
 
   const diaConcluidoPorIdx = useMemo(() => {
@@ -524,6 +569,7 @@ export default function PlanejamentoSemanal() {
               chipSelecionado={chipSelecionado}
               onSelectChip={(id) => setChipSelecionado(c => (c === id ? null : id))}
               temSelecao={!!chipSelecionado}
+              bloqueadoTreino={(id) => treinosBloqueadosSemana.has(id)}
             />
 
             {/* Grade semanal */}
@@ -538,6 +584,7 @@ export default function PlanejamentoSemanal() {
                   hoje={false}
                   concluido={diaConcluidoPorIdx[index]}
                   concluidoPorData={concluidoPorData}
+                  bloqueadoTreino={(id) => treinosBloqueadosSemana.has(id)}
                   chipSelecionado={chipSelecionado}
                   onSoltarSelecionado={(treinoId) => alocarTreino(treinoId, index)}
                   onToggleDescanso={() => toggleDescanso(index)}
@@ -576,7 +623,7 @@ export default function PlanejamentoSemanal() {
 // CHIP DE TREINO NO BANCO (draggable)
 // =============================================================
 
-function ChipBancoTreino({ id, nome, qtdEx, ehPuroCardio, usos, selecionado, temSelecao, onSelect }: {
+function ChipBancoTreino({ id, nome, qtdEx, ehPuroCardio, usos, selecionado, temSelecao, bloqueado, onSelect }: {
   id: string;
   nome: string;
   qtdEx: number;
@@ -584,37 +631,50 @@ function ChipBancoTreino({ id, nome, qtdEx, ehPuroCardio, usos, selecionado, tem
   usos: number;
   selecionado: boolean;
   temSelecao: boolean;
+  bloqueado: boolean;
   onSelect: () => void;
 }) {
-  const { attributes, listeners, setNodeRef, transform, isDragging } = useSortable({ id: bancoChipId(id), data: { fonte: 'banco' } });
+  const { attributes, listeners, setNodeRef, transform, isDragging } = useSortable({ id: bancoChipId(id), data: { fonte: 'banco' }, disabled: bloqueado });
   const style = transform ? { transform: CSS.Translate.toString(transform) } : undefined;
 
   return (
     <button
       ref={setNodeRef}
       style={style}
-      {...attributes}
-      {...listeners}
+      {...(bloqueado ? {} : attributes)}
+      {...(bloqueado ? {} : listeners)}
       onClick={(e) => {
         if (isDragging) return;
+        if (bloqueado) return;
         e.detail > 0 && onSelect();
       }}
-      title="Arraste para um dia ou clique para selecionar"
+      title={bloqueado
+        ? 'Já concluído nesta semana — não pode ser remanejado até segunda-feira.'
+        : 'Arraste para um dia ou clique para selecionar'}
       className={`relative inline-flex items-center gap-2 px-3 py-2 clip-bevel-sm border text-left transition-all duration-150 touch-none ${
-        selecionado
-          ? 'border-accent bg-accent/15 ring-1 ring-accent/50'
-          : isDragging
-            ? 'border-accent/40 opacity-30'
-            : 'border-line bg-panel-2 hover:border-accent/40'
+        bloqueado
+          ? 'border-emerald-500/25 bg-emerald-500/[0.03] cursor-not-allowed opacity-70'
+          : selecionado
+            ? 'border-accent bg-accent/15 ring-1 ring-accent/50'
+            : isDragging
+              ? 'border-accent/40 opacity-30'
+              : 'border-line bg-panel-2 hover:border-accent/40'
       }`}
     >
-      <GripVertical size={13} className={`shrink-0 ${temSelecao && !selecionado ? 'text-[#37373E]' : 'text-accent'}`} />
+      {bloqueado
+        ? <Lock size={13} className="shrink-0 text-emerald-400" />
+        : <GripVertical size={13} className={`shrink-0 ${temSelecao && !selecionado ? 'text-[#37373E]' : 'text-accent'}`} />}
       {ehPuroCardio && <Flame size={12} className="shrink-0 text-orange-400" />}
       <span className="text-xs font-bold text-bone">{nome}</span>
       <span className="text-[10px] text-muted-steel">{qtdEx} ex</span>
       {usos > 0 && (
         <span className="text-[9px] font-extrabold uppercase tracking-wide text-accent-light bg-accent/15 border border-accent/30 px-1.5 py-0.5">
           {usos}×
+        </span>
+      )}
+      {bloqueado && (
+        <span className="text-[9px] font-extrabold uppercase tracking-wide text-emerald-400 bg-emerald-500/15 border border-emerald-500/30 px-1.5 py-0.5">
+          concluído
         </span>
       )}
     </button>
@@ -625,12 +685,13 @@ function ChipBancoTreino({ id, nome, qtdEx, ehPuroCardio, usos, selecionado, tem
 // ZONA DO BANCO (droppable: soltar aqui remove a alocação)
 // =============================================================
 
-function ZonaBanco({ fichaNome, treinos, chipSelecionado, onSelectChip, temSelecao }: {
+function ZonaBanco({ fichaNome, treinos, chipSelecionado, onSelectChip, temSelecao, bloqueadoTreino }: {
   fichaNome: string;
   treinos: { id: string; nome: string; qtdEx: number; ehPuroCardio: boolean; usos: number }[];
   chipSelecionado: string | null;
   onSelectChip: (id: string) => void;
   temSelecao: boolean;
+  bloqueadoTreino: (id: string) => boolean;
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: BANCO_ID });
 
@@ -661,6 +722,7 @@ function ZonaBanco({ fichaNome, treinos, chipSelecionado, onSelectChip, temSelec
                 {...t}
                 selecionado={chipSelecionado === t.id}
                 temSelecao={temSelecao}
+                bloqueado={bloqueadoTreino(t.id)}
                 onSelect={() => onSelectChip(t.id)}
               />
             ))}
@@ -675,7 +737,7 @@ function ZonaBanco({ fichaNome, treinos, chipSelecionado, onSelectChip, temSelec
 // COLUNA DO DIA (droppable com cards ordenáveis)
 // =============================================================
 
-function ColunaDia({ dia, estado, nomeCurto, nomeCompleto, hoje, concluido, concluidoPorData, chipSelecionado, onSoltarSelecionado, onToggleDescanso, onRemover, nomeTreino, qtdExTreino, puroCardioTreino }: {
+function ColunaDia({ dia, estado, nomeCurto, nomeCompleto, hoje, concluido, concluidoPorData, bloqueadoTreino, chipSelecionado, onSoltarSelecionado, onToggleDescanso, onRemover, nomeTreino, qtdExTreino, puroCardioTreino }: {
   dia: number;
   estado: DiaState;
   nomeCurto: string;
@@ -683,6 +745,7 @@ function ColunaDia({ dia, estado, nomeCurto, nomeCompleto, hoje, concluido, conc
   hoje: boolean;
   concluido: boolean;
   concluidoPorData: Set<string>;
+  bloqueadoTreino: (id: string) => boolean;
   chipSelecionado: string | null;
   onSoltarSelecionado: (treinoId: string) => void;
   onToggleDescanso: () => void;
@@ -755,6 +818,7 @@ function ColunaDia({ dia, estado, nomeCurto, nomeCompleto, hoje, concluido, conc
                 qtdEx={qtdExTreino(a.treinoId)}
                 ehPuroCardio={puroCardioTreino(a.treinoId)}
                 concluido={dataDoDia !== '' && concluidoPorData.has(`${a.treinoId}|${dataDoDia}`)}
+                bloqueado={bloqueadoTreino(a.treinoId)}
                 onRemover={() => onRemover(i)}
               />
             ))}
@@ -769,36 +833,41 @@ function ColunaDia({ dia, estado, nomeCurto, nomeCompleto, hoje, concluido, conc
 // CARD ALOCADO EM UM DIA (sortable)
 // =============================================================
 
-function CardTreinoDia({ idDrag, nome, qtdEx, ehPuroCardio, concluido, onRemover }: {
+function CardTreinoDia({ idDrag, nome, qtdEx, ehPuroCardio, concluido, bloqueado, onRemover }: {
   idDrag: string;
   nome: string;
   qtdEx: number;
   ehPuroCardio: boolean;
   concluido: boolean;
+  bloqueado: boolean;
   onRemover: () => void;
 }) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: idDrag });
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: idDrag, disabled: bloqueado });
 
   return (
     <div
       ref={setNodeRef}
       style={{ transform: CSS.Translate.toString(transform), transition }}
-      {...attributes}
-      {...listeners}
-      className={`group relative flex items-center gap-1.5 pl-2 pr-7 py-2 bg-panel-2 border clip-bevel-sm touch-none transition-opacity ${
-        isDragging
-          ? 'opacity-30 border-dashed'
-          : concluido
-            ? 'border-emerald-500/40'
-            : 'border-line hover:border-accent/40'
+      {...(bloqueado ? { title: 'Já concluído nesta semana — não pode ser movido ou removido.' } : attributes)}
+      {...(bloqueado ? {} : listeners)}
+      className={`group relative flex items-center gap-1.5 pl-2 pr-7 py-2 bg-panel-2 border clip-bevel-sm transition-opacity ${
+        bloqueado
+          ? 'border-emerald-500/40 cursor-not-allowed'
+          : isDragging
+            ? 'opacity-30 border-dashed touch-none'
+            : concluido
+              ? 'border-emerald-500/40 touch-none'
+              : 'border-line hover:border-accent/40 touch-none'
       }`}
     >
-      <GripVertical size={11} className={concluido ? 'text-emerald-400 shrink-0' : 'text-accent shrink-0 cursor-grab active:cursor-grabbing'} />
+      {bloqueado
+        ? <Lock size={11} className="text-emerald-400 shrink-0" />
+        : <GripVertical size={11} className={concluido ? 'text-emerald-400 shrink-0' : 'text-accent shrink-0 cursor-grab active:cursor-grabbing'} />}
       {ehPuroCardio && <Flame size={11} className="text-orange-400 shrink-0" />}
       <div className="min-w-0 flex-1">
         <p className={`text-[11.5px] font-bold leading-none truncate ${concluido ? 'text-emerald-300' : 'text-bone'}`}>{nome}</p>
         <p className={`text-[9.5px] mt-0.5 ${concluido ? 'text-emerald-400/80' : 'text-muted-steel'}`}>
-          {concluido ? 'Concluído hoje' : `${qtdEx} exercício(s)`}
+          {concluido ? 'Concluído hoje' : bloqueado ? `Concluído nesta semana · ${qtdEx} exercício(s)` : `${qtdEx} exercício(s)`}
         </p>
       </div>
       {concluido && (
@@ -806,14 +875,16 @@ function CardTreinoDia({ idDrag, nome, qtdEx, ehPuroCardio, concluido, onRemover
           <Check size={10} className="text-emerald-300" />
         </span>
       )}
-      <button
-        onPointerDown={e => { e.stopPropagation(); }}
-        onClick={e => { e.stopPropagation(); onRemover(); }}
-        title="Remover deste dia"
-        className="absolute right-1 top-1/2 -translate-y-1/2 p-1 text-[#6C6C74] hover:text-red-400 transition-colors"
-      >
-        <X size={12} />
-      </button>
+      {!bloqueado && (
+        <button
+          onPointerDown={e => { e.stopPropagation(); }}
+          onClick={e => { e.stopPropagation(); onRemover(); }}
+          title="Remover deste dia"
+          className="absolute right-1 top-1/2 -translate-y-1/2 p-1 text-[#6C6C74] hover:text-red-400 transition-colors"
+        >
+          <X size={12} />
+        </button>
+      )}
     </div>
   );
 }

@@ -468,6 +468,8 @@ export const fichas = {
         meta_carbo: dados.meta_carbo ?? '',
         meta_gordura: dados.meta_gordura ?? '',
         meta_fibra: dados.meta_fibra ?? '',
+        metas_por_dia: dados.metas_por_dia ?? null,
+        is_ciclo_ativado: dados.is_ciclo_ativado ?? false,
       },
     });
 
@@ -486,6 +488,8 @@ export const fichas = {
           meta_carbo,
           meta_gordura,
           meta_fibra,
+          metas_por_dia,
+          is_ciclo_ativado,
           fichas!inner(user_id, tipo)
         `)
         .eq('fichas.user_id', userId)
@@ -495,12 +499,14 @@ export const fichas = {
 
       if (error || !data || data.length === 0) return null;
       const m = data[0] as any;
+      const temCiclo = m.is_ciclo_ativado === true && m.metas_por_dia != null;
       const todasVazias =
         m.meta_kcal == null &&
         m.meta_proteina == null &&
         m.meta_carbo == null &&
         m.meta_gordura == null &&
-        m.meta_fibra == null;
+        m.meta_fibra == null &&
+        !temCiclo;
 
       if (todasVazias) return null;
 
@@ -510,6 +516,8 @@ export const fichas = {
         meta_carbo: m.meta_carbo ?? 0,
         meta_gordura: m.meta_gordura ?? 0,
         meta_fibra: m.meta_fibra ?? 0,
+        metas_por_dia: m.metas_por_dia ?? null,
+        is_ciclo_ativado: m.is_ciclo_ativado === true,
       };
     });
   },
@@ -646,7 +654,7 @@ export const treinosFicha = {
     }));
   },
 
-  create: async (fichaId: string, letraOuNome: string, observacoes?: string, periodizacaoId?: string): Promise<TreinoFicha> => {
+  create: async (fichaId: string, letraOuNome: string, observacoes?: string, periodizacaoId?: string, isCardioIsolado?: boolean): Promise<TreinoFicha> => {
     cacheDeletePrefix('fichaAtiva:');
     const { data, error } = await supabase
       .from('treinos_ficha')
@@ -655,6 +663,7 @@ export const treinosFicha = {
         letra_ou_nome: letraOuNome,
         observacoes: observacoes?.trim() || null,
         periodizacao_id: periodizacaoId || null,
+        is_cardio_isolado: isCardioIsolado === true,
       })
       .select()
       .single();
@@ -707,6 +716,7 @@ export const treinosFicha = {
         letra_ou_nome: nomeFinal,
         observacoes: base.observacoes ?? null,
         periodizacao_id: periodizacaoAlvoId,
+        is_cardio_isolado: base.is_cardio_isolado === true,
       })
       .select()
       .single();
@@ -733,6 +743,11 @@ export const treinosFicha = {
         categoria: ex.categoria || 'forca',
         meta_tempo_min: ex.meta_tempo_min ?? null,
         meta_distancia_km: ex.meta_distancia_km ?? null,
+        tipo_treino_corrida: ex.tipo_treino_corrida ?? null,
+        meta_minutos: ex.meta_minutos ?? null,
+        qtd_tiros: ex.qtd_tiros ?? null,
+        distancia_tiro: ex.distancia_tiro ?? null,
+        meta_distancia_corrida: ex.meta_distancia_corrida ?? null,
       }));
 
       const { data: novos, error: erroEx } = await supabase
@@ -750,11 +765,12 @@ export const treinosFicha = {
     return { ...(criado as TreinoFicha), exercicios: [] };
   },
 
-  update: async (id: string, updates: { letra_ou_nome?: string; observacoes?: string }): Promise<TreinoFicha> => {
+  update: async (id: string, updates: { letra_ou_nome?: string; observacoes?: string; is_cardio_isolado?: boolean }): Promise<TreinoFicha> => {
     cacheDeletePrefix('fichaAtiva:');
     const payload: Record<string, any> = {};
     if (updates.letra_ou_nome !== undefined) payload.letra_ou_nome = updates.letra_ou_nome;
     if (updates.observacoes !== undefined) payload.observacoes = updates.observacoes.trim() || null;
+    if (updates.is_cardio_isolado !== undefined) payload.is_cardio_isolado = updates.is_cardio_isolado;
 
     const { data, error } = await supabase
       .from('treinos_ficha')
@@ -864,6 +880,11 @@ export const exerciciosTreino = {
       categoria: ex.categoria || 'forca',
       meta_tempo_min: ex.meta_tempo_min ?? null,
       meta_distancia_km: ex.meta_distancia_km ?? null,
+      tipo_treino_corrida: ex.tipo_treino_corrida ?? null,
+      meta_minutos: ex.meta_minutos ?? null,
+      qtd_tiros: ex.qtd_tiros ?? null,
+      distancia_tiro: ex.distancia_tiro ?? null,
+      meta_distancia_corrida: ex.meta_distancia_corrida ?? null,
     }));
 
     const { data, error } = await supabase
@@ -954,43 +975,68 @@ export const logsExecucao = {
     return data as LogExecucao[];
   },
 
-  getProgresso: async (userId: string): Promise<SessaoComProgresso[]> => {
-    const chave = `progresso:${userId}`;
+  getProgresso: async (userId: string, range?: { inicio?: string; fim?: string }): Promise<SessaoComProgresso[]> => {
+    const chave = range?.inicio || range?.fim
+      ? `progresso:${userId}:${range?.inicio || '*'}:${range?.fim || '*'}`
+      : `progresso:${userId}`;
     return withCache(chave, async () => {
-    const { data: sessoes, error: sessError } = await supabase
+    let query = supabase
       .from('logs_treino')
       .select('id, treino_id, data_execucao, duracao_segundos, treinos_ficha(letra_ou_nome)')
       .eq('user_id', userId)
       .order('data_execucao', { ascending: false });
+    // Janela da semana atual (Seg 00:00 até Dom 23:59:59.999, fuso SP).
+    // Quando fornecida, a query só enxerga a semana corrente no banco.
+    if (range?.inicio) query = query.gte('data_execucao', range.inicio);
+    if (range?.fim) query = query.lte('data_execucao', range.fim);
+
+    const { data: sessoes, error: sessError } = await query;
 
     if (sessError || !sessoes || sessoes.length === 0) return [];
 
-    const treinoIds = [...new Set(sessoes.map(s => s.treino_id))];
+    // Sessões avulsas de Cardio Isolado Livre têm treino_id NULL — excluir do
+    // `in` para não quebrar/infectar a query de exercícios (PostgREST).
+    const treinoIds = [...new Set(sessoes.map(s => s.treino_id))].filter(Boolean) as string[];
 
-    const { data: exercicios, error: exError } = await supabase
-      .from('exercicios_treino')
-      .select('id, treino_id, nome_exercicio, grupo_muscular, musculo_principal, ordem')
-      .in('treino_id', treinoIds)
-      .order('ordem', { ascending: true });
+    let exercicios: any[] = [];
+    let exError: { message: string } | null = null;
+    if (treinoIds.length > 0) {
+      const res = await supabase
+        .from('exercicios_treino')
+        .select('id, treino_id, nome_exercicio, grupo_muscular, musculo_principal, ordem')
+        .in('treino_id', treinoIds)
+        .order('ordem', { ascending: true });
+      exercicios = (res.data as any[]) || [];
+      exError = res.error;
+    }
 
-    if (exError || !exercicios || exercicios.length === 0) return [];
+    // Falha real na leitura dos exercícios derruba a consulta; mas histórico
+    // SEM exercícios (ex.: apenas Cardio Isolado Livre) continua retornando
+    // as sessões com seus cardios — não pode zerar o histórico inteiro.
+    if (exError) return [];
 
-    const exercicioIds = exercicios.map(e => e.id);
+    const exercicioIds = exercicios.map((e: any) => e.id);
     const sessaoIds = sessoes.map(s => s.id);
 
-    const [{ data: logs, error: logsError }, { data: cardiosData }] = await Promise.all([
-      supabase
+    // Logs de séries: só consultou se houver exercícios; sessões só de Cardio
+    // Isolado Livre (sem exercises) ficam sem linhas aqui — é OK.
+    let logs: any[] = [];
+    let logsError: { message: string } | null = null;
+    if (exercicioIds.length > 0) {
+      const res = await supabase
         .from('logs_execucao')
         .select('exercicio_id, carga, repeticoes_realizadas, serie_valida, is_warmup, log_treino_id, num_serie')
         .in('exercicio_id', exercicioIds)
-        .not('log_treino_id', 'is', null),
-      supabase
-        .from('logs_cardio')
-        .select('exercicio_id, nome_cardio, user_id, duracao_min, distancia_km, log_treino_id')
-        .in('log_treino_id', sessaoIds),
-    ]);
+        .not('log_treino_id', 'is', null);
+      logs = (res.data as any[]) || [];
+      logsError = res.error;
+    }
+    const { data: cardiosData } = await supabase
+      .from('logs_cardio')
+      .select('exercicio_id, nome_cardio, user_id, duracao_min, distancia_km, log_treino_id')
+      .in('log_treino_id', sessaoIds);
 
-    if (logsError || !logs) return [];
+    if (logsError) return [];
 
     const exercicioPorTreino = new Map<string, typeof exercicios>();
     for (const ex of exercicios) {
@@ -1102,14 +1148,94 @@ export const logsExecucao = {
 // LOGS DE CARDIO
 // =============================================================
 
+// Normaliza um payload de cardio vindo da UI para que o INSERT nunca chegue
+// ao Supabase com `undefined` ou formatos incompatíveis com o schema
+// (numeric(5,1), numeric(6,2), date, uuid). Qualquer valor ausente/inválido
+// vira null (ou fallback para campos obrigatórios).
+function coerceCardioFields(dados: {
+  exercicioId?: string | null;
+  userId?: string | null;
+  nomeCardio?: string | null;
+  duracaoMin: number;
+  distanciaKm?: number | null;
+  dataTreino?: string;
+  logTreinoId?: string | null;
+}): LogCardioInput {
+  const duracaoRaw = Number(dados.duracaoMin);
+  const duracaoMin = Number.isFinite(duracaoRaw) && duracaoRaw > 0
+    ? Math.min(Math.round(Math.max(0, duracaoRaw) * 10) / 10, 999.9)
+    : 1;
+  const distRaw = Number(dados.distanciaKm);
+  const distanciaKm = Number.isFinite(distRaw) && distRaw > 0
+    ? Math.min(Math.round(distRaw * 100) / 100, 999.99)
+    : null;
+  return {
+    exercicio_id: dados.exercicioId || null,
+    user_id: dados.userId || null,
+    log_treino_id: dados.logTreinoId || null,
+    nome_cardio: (dados.nomeCardio && dados.nomeCardio.trim()) || 'Cardio',
+    duracao_min: duracaoMin,
+    distancia_km: distanciaKm,
+    data_treino: dados.dataTreino || hojeSP(),
+  };
+}
+
+// Base transacional do Cardio Isolado (Livre e da Ficha): cria a sessão em
+// logs_treino e depois a linha em logs_cardio com o payload já sanitizado.
+// Se o segundo INSERT falhar (RLS, schema, rede), desfaz o logs_treino
+// recém-criado — o treino NUNCA fica marcado "Concluído" por um save parcial.
+async function inserirSessaoCardio(userId: string, dados: {
+  treinoId?: string | null;
+  exercicioId?: string | null;
+  nomeCardio: string;
+  duracaoMin: number;
+  distanciaKm?: number | null;
+  dataTreino?: string;
+}): Promise<{ logTreinoId: string }> {
+  if (!userId) throw new Error('Usuário não informado.');
+  const duracaoMin = Math.max(1, Math.round(Number(dados.duracaoMin) || 0));
+  const logTreino = await logsTreino.create(userId, dados.treinoId || null, Math.round(duracaoMin * 60));
+
+  const row = coerceCardioFields({
+    exercicioId: dados.exercicioId,
+    userId,
+    nomeCardio: dados.nomeCardio,
+    duracaoMin,
+    distanciaKm: dados.distanciaKm,
+    dataTreino: dados.dataTreino,
+    logTreinoId: logTreino.id,
+  });
+
+  const { error } = await supabase.from('logs_cardio').insert(row);
+  if (error) {
+    try {
+      await logsTreino.removerPorId(logTreino.id);
+    } catch (rollbackErr) {
+      console.error('[logsCardio:rollback] Falha ao desfazer sessão parcial', rollbackErr);
+    }
+    throw error;
+  }
+
+  return { logTreinoId: logTreino.id };
+}
+
 export const logsCardio = {
   upsertDia: async (rows: LogCardioInput[]): Promise<void> => {
     if (rows.length === 0) return;
     cacheDeletePrefix('progresso:');
     cacheDeletePrefix('volume:');
+    const limpos = rows.map(r => coerceCardioFields({
+      exercicioId: r.exercicio_id,
+      userId: r.user_id,
+      nomeCardio: r.nome_cardio,
+      duracaoMin: r.duracao_min,
+      distanciaKm: r.distancia_km,
+      dataTreino: r.data_treino,
+      logTreinoId: r.log_treino_id,
+    }));
     const { error } = await supabase
       .from('logs_cardio')
-      .upsert(rows, { onConflict: 'exercicio_id,data_treino,log_treino_id' });
+      .upsert(limpos, { onConflict: 'exercicio_id,data_treino,log_treino_id' });
     if (error) throw error;
   },
 
@@ -1134,24 +1260,38 @@ export const logsCardio = {
     dataTreino?: string;
   }): Promise<{ logTreinoId: string }> => {
     if (!userId) throw new Error('Usuário não informado.');
-    const duracaoMin = Math.max(1, Math.round(dados.duracaoMin) || 0);
-    const nomeCardio = (dados.nomeCardio || 'Cardio').trim();
+    return inserirSessaoCardio(userId, {
+      treinoId: null,
+      exercicioId: null,
+      nomeCardio: dados.nomeCardio,
+      duracaoMin: dados.duracaoMin,
+      distanciaKm: dados.distanciaKm,
+      dataTreino: dados.dataTreino,
+    });
+  },
 
-    const logTreino = await logsTreino.create(userId, null, Math.round(duracaoMin * 60));
-
-    const row: LogCardioInput = {
-      exercicio_id: null,
-      user_id: userId,
-      nome_cardio: nomeCardio,
-      duracao_min: Math.min(duracaoMin, 999.9),
-      distancia_km: dados.distanciaKm && dados.distanciaKm > 0 ? Math.min(dados.distanciaKm, 999.99) : null,
-      data_treino: dados.dataTreino || hojeSP(),
-      log_treino_id: logTreino.id,
-    };
-    const { error } = await supabase.from('logs_cardio').insert(row);
-    if (error) throw error;
-
-    return { logTreinoId: logTreino.id };
+  // Cardio Isolado da FICHA: mesma base do "livre", porém vinculado ao
+  // treino real (treino_id) e ao exercício único de cardio injetado nele
+  // (exercicio_id). Assim o registro vale como "Sessão Concluída" do dia:
+  // a fila do aluno marca "Concluído hoje" e o progresso semanal
+  // (diasTreinadosNaSemana / Story) reconhece o esforço automaticamente.
+  criarCardioIsoladoDoTreino: async (userId: string, treinoId: string, exercicioId: string, dados: {
+    nomeCardio: string;
+    duracaoMin: number;
+    distanciaKm?: number | null;
+    dataTreino?: string;
+  }): Promise<{ logTreinoId: string }> => {
+    if (!userId) throw new Error('Usuário não informado.');
+    if (!treinoId) throw new Error('Treino não informado.');
+    if (!exercicioId) throw new Error('Exercício de cardio não informado.');
+    return inserirSessaoCardio(userId, {
+      treinoId,
+      exercicioId,
+      nomeCardio: dados.nomeCardio,
+      duracaoMin: dados.duracaoMin,
+      distanciaKm: dados.distanciaKm,
+      dataTreino: dados.dataTreino,
+    });
   },
 };
 
@@ -1179,6 +1319,31 @@ export const logsTreino = {
 
     if (error) throw error;
     return data as LogTreino;
+  },
+
+  // Rollback físico de uma sessão criada no meio de um envio que falhou:
+  // remove as séries/cardios vinculados (FK SET NULL, então preciso apagar
+  // os filhos antes) e a sessão em logs_treino. Usado apenas para desfazer
+  // o save parcial da MESMA sessão (não expõe exclusão de histórico real).
+  removerPorId: async (id: string): Promise<void> => {
+    cacheDeletePrefix('progresso:');
+    cacheDeletePrefix('volume:');
+    cacheDeletePrefix('sequencia:');
+    const { error: errSeries } = await supabase
+      .from('logs_execucao')
+      .delete()
+      .eq('log_treino_id', id);
+    if (errSeries) throw errSeries;
+    const { error: errCardio } = await supabase
+      .from('logs_cardio')
+      .delete()
+      .eq('log_treino_id', id);
+    if (errCardio) throw errCardio;
+    const { error: errLog } = await supabase
+      .from('logs_treino')
+      .delete()
+      .eq('id', id);
+    if (errLog) throw errLog;
   },
 
   getByCliente: async (userId: string): Promise<SessaoHistorico[]> => {
@@ -1220,7 +1385,11 @@ export const planejamento = {
         .order('dia_semana', { ascending: true })
         .order('ordem', { ascending: true });
 
-      if (error || !data) return [];
+      if (error) {
+        console.error('[planejamento.get] Erro ao buscar planejamento:', error.message);
+        return [];
+      }
+      if (!data) return [];
 
       return data.map((item: any) => ({
         id: item.id,

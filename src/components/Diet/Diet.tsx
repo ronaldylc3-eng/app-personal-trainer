@@ -6,6 +6,9 @@ import { useAlunos } from '../../hooks/useAlunos';
 import { useAuth } from '../../hooks/useAuth';
 import { meals as mealsApi, fixedFoods as fixedFoodsApi, fichas, refeicoesDieta, dieta, hojeSP, METAS_PADRAO } from '../../services/api';
 import { supabase } from '../../lib/supabase';
+import { diaSemanaSP } from '../../utils/semanaUtils';
+import { resolverMetasDoDia } from '../../utils/metasNutricionais';
+import { DAYS_OF_WEEK } from '../../types';
 import type { Meal, FixedFood, FichaCompleta, RefeicaoDieta, MetasNutricionais } from '../../types';
 
 const MACRO_LABELS: Record<string, string> = { calories: 'Calorias', protein: 'Proteína', carbs: 'Carboidrato', fat: 'Gordura', fiber: 'Fibras' };
@@ -298,13 +301,15 @@ function DietView({ alunoId, modoGestor, currentProfile }: DietViewProps) {
     fiber: acc.fiber + (m.fiber || 0),
   }), { calories: 0, protein: 0, carbs: 0, fat: 0, fiber: 0 });
 
-  // Metas efetivas: acompanhamento mais recente -> fallback padrao
+  // Metas efetivas: Meta Base -> fallback padrao; com ciclo ativado, aplica o dia corrente
+  const diaHojeDiet = diaSemanaSP();
+  const { efetivas: metasEfetivas, diaTemMetaEspecifica: cicloHojeDiet } = resolverMetasDoDia(metas, METAS_PADRAO, diaHojeDiet);
   const goals = {
-    calories: metas?.meta_kcal || METAS_PADRAO.meta_kcal,
-    protein: metas?.meta_proteina || METAS_PADRAO.meta_proteina,
-    carbs: metas?.meta_carbo || METAS_PADRAO.meta_carbo,
-    fat: metas?.meta_gordura || METAS_PADRAO.meta_gordura,
-    fiber: metas?.meta_fibra || METAS_PADRAO.meta_fibra,
+    calories: metasEfetivas.meta_kcal,
+    protein: metasEfetivas.meta_proteina,
+    carbs: metasEfetivas.meta_carbo,
+    fat: metasEfetivas.meta_gordura,
+    fiber: metasEfetivas.meta_fibra,
   };
 
   async function handleAnalyze() {
@@ -723,6 +728,11 @@ function DietView({ alunoId, modoGestor, currentProfile }: DietViewProps) {
               <div className="lg:col-span-2 bg-panel border border-line clip-bevel-sm p-4 md:p-6">
                 <h3 className="font-display text-[11.5px] tracking-[0.12em] uppercase text-bone flex items-center gap-2 mb-6">
                   Consumo do Dia
+                  {cicloHojeDiet && (
+                    <span className="flex items-center gap-1.5 px-2 py-0.5 clip-bevel-sm bg-accent/15 border border-accent/30 text-accent-light text-[9px] font-extrabold uppercase tracking-[0.15em]">
+                      🔥 Meta Específica de {DAYS_OF_WEEK[diaHojeDiet].name}
+                    </span>
+                  )}
                 </h3>
                 {!metas && (
                   <div className="mb-5 flex items-center gap-2 clip-bevel-sm px-3 py-2 text-[11px] bg-amber-500/5 border border-amber-500/20 text-amber-400/90">

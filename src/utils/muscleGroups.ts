@@ -87,8 +87,11 @@ const ALIASES: Record<string, string[]> = {
   'Bíceps': ['Biceps', 'Bíceps', 'Braquial', 'Bíceps Braquial'],
   'Tríceps': ['Triceps', 'Tríceps', 'Tríceps Braquial'],
   Pernas: [
-    'Pernas', 'Posterior de coxa', 'Isquiotibiais', 'Glúteo', 'Glúteos',
-    'Panturrilhas', 'Panturrilha', 'Adutores', 'Abdutores', 'Bíceps femoral',
+    'Pernas', 'Posterior de coxa', 'Posterior da coxa', 'Isquiotibiais',
+    'Isquiotibial', 'Glúteo', 'Glúteos', 'Glúteo máximo',
+    'Panturrilhas', 'Panturrilha', 'Gastrocnêmio', 'Gastrocnemio',
+    'Sóleo', 'Soleo', 'Gêmeos', 'Gemeos', 'Quadriceps', 'Quadríceps',
+    'Adutores', 'Abdutores', 'Bíceps femoral',
   ],
   Antebraço: ['Antebraço', 'Antebraco'],
 };
@@ -169,6 +172,27 @@ for (const g of MACRO_GRUPOS) {
   }
 }
 
+// Apelidos de "porções de perna" usados como musculo_principal/grupo_muscular
+// nas fichas espelhadas para o feminino (Posterior de coxa, Isquiotibiais,
+// Gastrocnêmio, Sóleo, Glúteo...) → porção canônica exibida no gráfico.
+const PERNA_ALIASES: Record<string, string> = {
+  'posterior de coxa': 'Posterior de Perna',
+  'posterior da coxa': 'Posterior de Perna',
+  isquiotibiais: 'Posterior de Perna',
+  isquiotibial: 'Posterior de Perna',
+  'biceps femoral': 'Posterior de Perna',
+  quadriceps: 'Quadríceps',
+  'quadriceps femoral': 'Quadríceps',
+  gluteos: 'Glúteos',
+  gluteo: 'Glúteos',
+  'gluteo maximo': 'Glúteos',
+  panturrilha: 'Panturrilha',
+  panturrilhas: 'Panturrilha',
+  gastrocnemio: 'Panturrilha',
+  soleo: 'Panturrilha',
+  gemeos: 'Panturrilha',
+};
+
 /**
  * Resolve a chave de agrupamento correta para os gráficos de Séries Válidas e Volume.
  * Garante que Bíceps e Tríceps nunca se misturem e respeita a divisão feminina de Pernas.
@@ -187,7 +211,12 @@ export function resolverChaveGrafico(
   if (isFeminino && macro === 'Pernas') {
     const porcaoCandidata = grupoPorcao || musculoPrincipal;
     if (porcaoCandidata) {
-      const canonica = microCanonicoPorNorma.get(normalizar(porcaoCandidata));
+      const norma = normalizar(porcaoCandidata);
+      // 2a. Prioridade para apelidos de porta (Posterior de coxa, Gastrocnêmio...)
+      const viaAlias = PERNA_ALIASES[norma];
+      if (viaAlias) return viaAlias;
+      // 2b. Depois tenta a porção canônica direta
+      const canonica = microCanonicoPorNorma.get(norma);
       if (canonica && microsDe('Pernas').includes(canonica)) {
         return canonica;
       }

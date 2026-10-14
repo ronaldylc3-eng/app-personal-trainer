@@ -75,6 +75,77 @@ export function CalendarioCanetaIcon({ size = 24, strokeWidth = 2, className, st
   );
 }
 
+export function RelatorioGraficoIcon({ size = 24, strokeWidth = 2, className, style }: AppIconProps) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={strokeWidth}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+      style={style}
+      aria-hidden="true"
+    >
+      <path d="M 5.3 5.3 L 5.3 18.7 L 19.7 18.7" />
+      <path d="M 9.1 16.3 L 9.1 7.7" />
+      <path d="M 13 16.3 L 13 12" />
+      <path d="M 16.8 16.3 L 16.8 9.6" />
+    </svg>
+  );
+}
+
+export function PlacaTaticaIcon({ size = 46, className, style }: AppIconProps) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 200 200"
+      xmlns="http://www.w3.org/2000/svg"
+      className={`flex-none ${className || ''}`}
+      style={style}
+      aria-hidden="true"
+    >
+      <defs>
+        <radialGradient id="ptt-bg" cx="35%" cy="30%" r="85%">
+          <stop offset="0%" stopColor="#2b2b2b" />
+          <stop offset="55%" stopColor="#161616" />
+          <stop offset="100%" stopColor="#0a0a0a" />
+        </radialGradient>
+        <linearGradient id="ptt-border" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" stopColor="#5a4a42" />
+          <stop offset="45%" stopColor="#2c2622" />
+          <stop offset="100%" stopColor="#1a1a1a" />
+        </linearGradient>
+        <filter id="ptt-glow" x="-50%" y="-50%" width="200%" height="200%">
+          <feGaussianBlur stdDeviation="3" result="blur" />
+          <feMerge>
+            <feMergeNode in="blur" />
+            <feMergeNode in="SourceGraphic" />
+          </feMerge>
+        </filter>
+      </defs>
+
+      <path
+        d="M 50,2 L 174,2 Q 198,2 198,26 V 150 L 150,198 H 26 Q 2,198 2,174 V 50 Z"
+        fill="url(#ptt-bg)"
+        stroke="url(#ptt-border)"
+        strokeWidth="2.5"
+      />
+
+      <g filter="url(#ptt-glow)" stroke="#ff6a2b" strokeWidth="9" strokeLinecap="round" fill="none">
+        <line x1="72" y1="130" x2="72" y2="95" />
+        <line x1="100" y1="130" x2="100" y2="70" />
+        <line x1="128" y1="130" x2="128" y2="108" />
+      </g>
+      <line x1="60" y1="140" x2="140" y2="140" stroke="#ff6a2b" strokeWidth="9" strokeLinecap="round" filter="url(#ptt-glow)" />
+    </svg>
+  );
+}
+
 export function LogoBadge({ size = 46, children }: { size?: number; children: ReactNode }) {
   return (
     <div

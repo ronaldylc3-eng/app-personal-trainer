@@ -94,6 +94,17 @@ export interface AvaliacaoOs {
   created_at: string;
 }
 
+// Ciclo de carboidratos: meta especifica de um dia da semana (0=Dom..6=Sab)
+export interface CicloMetaDia {
+  kcal?: number | null;
+  carb?: number | null;
+  prot?: number | null;
+  gord?: number | null;
+}
+
+// Chaves "0".."6" (0=Domingo .. 6=Sabado)
+export type MetasPorDia = Partial<Record<'0' | '1' | '2' | '3' | '4' | '5' | '6', CicloMetaDia>>;
+
 export interface AcompanhamentoOsInput {
   nome?: string;
   relato?: string;
@@ -105,6 +116,8 @@ export interface AcompanhamentoOsInput {
   meta_carbo?: number | null;
   meta_gordura?: number | null;
   meta_fibra?: number | null;
+  metas_por_dia?: MetasPorDia | null;
+  is_ciclo_ativado?: boolean;
 }
 
 export interface AcompanhamentoOs {
@@ -119,6 +132,8 @@ export interface AcompanhamentoOs {
   meta_carbo: number | null;
   meta_gordura: number | null;
   meta_fibra: number | null;
+  metas_por_dia: MetasPorDia | null;
+  is_ciclo_ativado: boolean;
   created_at: string;
 }
 
@@ -129,6 +144,8 @@ export type MetasNutricionais = {
   meta_carbo: number;
   meta_gordura: number;
   meta_fibra: number;
+  metas_por_dia?: MetasPorDia | null;
+  is_ciclo_ativado?: boolean;
 } | null;
 
 // Evento unificado da timeline clinica
@@ -147,12 +164,16 @@ export interface TreinoFicha {
   letra_ou_nome: string;
   observacoes?: string | null;
   periodizacao_id: string;
+  is_cardio_isolado?: boolean | null;
   created_at: string;
 }
 
 // Categoria do item dentro da ficha: força = séries/reps/carga;
 // cardio = meta de tempo/distância (mesma lista, mesmo accordion).
 export type ExercicioCategoria = 'forca' | 'cardio';
+
+// Tipo de treino específico de corrida (Cardio Isolado).
+export type TipoTreinoCorrida = 'regenerativo' | 'intervalado' | 'longao';
 
 export interface ExercicioTreino {
   id: string;
@@ -169,6 +190,12 @@ export interface ExercicioTreino {
   categoria: ExercicioCategoria;
   meta_tempo_min?: number | null;
   meta_distancia_km?: number | null;
+  // Prescrições específicas de corrida (Cardio Isolado) — opcionais.
+  tipo_treino_corrida?: TipoTreinoCorrida | null;
+  meta_minutos?: number | null;
+  qtd_tiros?: number | null;
+  distancia_tiro?: string | null;
+  meta_distancia_corrida?: number | null;
 }
 
 // Execução de cardio registrada pelo aluno (upsert diário).
